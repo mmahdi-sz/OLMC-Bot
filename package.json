@@ -1,0 +1,25 @@
+{
+  "name": "mcrcon",
+  "version": "1.0.0",
+  "description": "A Telegram bot for RCON",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "input": "^1.0.1",
+    "moment-timezone": "^0.6.0",
+    "mysql2": "^3.14.5",
+    "node-cron": "^4.2.1",
+    "node-tail": "^0.0.4",
+    "node-telegram-bot-api": "^0.63.0",
+    "rcon-client": "^4.2.5",
+    "sqlite3": "^5.1.7",
+    "tail": "^2.2.6",
+    "telegram": "^2.26.22"
+  }
+}

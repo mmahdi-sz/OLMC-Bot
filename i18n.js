@@ -1,0 +1,227 @@
+// i18n.js
+
+const languages = {
+    fa: {
+        // General
+        greeting_admin: "سلام! 👋 برای شروع یکی از گزینه‌ها را انتخاب کن.",
+        greeting_user_approved: "🎉 به پنل کاربری خود خوش آمدید!\n\nاز طریق دکمه زیر می‌توانید اکانت خود را مدیریت کرده و لینک زیرمجموعه‌گیری خود را دریافت کنید.",
+        // <<<< CHANGE START >>>>
+        // این متن به دقت اصلاح شد تا فقط نام کاربری ادمین escape شود و از کرش کردن ربات به خاطر کاراکتر '_' جلوگیری کند.
+        greeting_user_pending: (admin, uuid) => `⏳ ثبت‌نام اولیه شما انجام شده ولی هنوز نهایی نشده است.\nلطفاً کد زیر را کپی کرده و برای ادمین پشتیبانی ارسال کنید:\n👤 *ادمین:* @${admin.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&')}\nکد شما:\n\`${uuid}\``,
+        // <<<< CHANGE END >>>>
+        error_generic: "❌ خطایی در بررسی وضعیت شما رخ داد. لطفاً بعداً دوباره تلاش کنید.",
+        errorMenu: "خطایی در نمایش منو رخ داد. لطفاً دوباره تلاش کنید.",
+        
+        // Language Selection
+        choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
+        language_changed: "✅ زبان با موفقیت به پارسی تغییر کرد.",
+
+        // Menus & Buttons
+        btn_rcon_menu: "اتصال مستقیم به rcon",
+        btn_admin_panel: "⚙️ بخش مدیریت ادمین‌ها",
+        btn_rank_list_management: "🏆 مدیریت لیست رنک",
+        btn_manage_account: "🔧 مدیریت اکانت",
+        btnBack: "🔙 بازگشت",
+        btnBackToMainMenu: "🔙 بازگشت به منوی اصلی",
+        btnBackToAccountPanel: "🔙 بازگشت به پنل اکانت",
+        btnCancel: "🚫 نه، بی‌خیال",
+        btnConfirmDelete: "✅ بله، حذف کن",
+
+        // Admin Panel
+        adminPanelTitle: "⚙️ بخش مدیریت ادمین‌ها",
+        btnAddAdmin: "➕ افزودن ادمین",
+        btnRemoveAdmin: "➖ حذف ادمین",
+        btnListAdmins: "👥 لیست ادمین‌ها",
+        promptAddAdmin: "لطفاً شناسه عددی (User ID) کاربر مورد نظر را ارسال کنید، یا یک پیام از او فوروارد کنید:",
+        adminListTitle: "👥 *لیست ادمین‌ها:*",
+        noAdminsFound: "هیچ ادمینی ثبت نشده است.",
+        adminListEntryName: "👤 *نام*",
+        adminListEntryId: "🆔 *شناسه*",
+        noAdminsToRemove: "هیچ ادمینی برای حذف وجود ندارد.",
+        promptRemoveAdmin: "کدام ادمین را می‌خواهید حذف کنید؟",
+        confirmRemoveAdmin: (id) => `آیا از حذف ادمین با شناسه \`${id}\` مطمئن هستید؟`,
+
+        // RCON Menu
+        rconMenuTitle: "لطفاً سرور خود را انتخاب کنید یا یک سرور جدید اضافه/حذف کنید:",
+        rconMenuTitleNoServers: "هیچ سروری ثبت نشده است. برای شروع یک سرور اضافه کنید:",
+        btnAddServer: "➕ افزودن سرور",
+        btnRemoveServer: "➖ حذف سرور",
+        promptAddServerIP: "لطفاً آدرس IP یا دامنه سرور را وارد کنید:",
+
+        // Account Panel
+        accountPanelTitle: "🔧 *پنل مدیریت اکانت*\n\nاز گزینه‌های زیر برای مدیریت حساب کاربری خود استفاده کنید:",
+        btnReferralInfo: "💎 کسب درآمد و زیرمجموعه‌گیری",
+        referralInfoMessage: (link) => `💎 *با دعوت از دوستات، هم بازی کن هم درآمد داشته باش!*\n\nاین لینک جادویی توئه! هر کسی باهاش بیاد تو سرور، تو رو برای همیشه پولدار می‌کنه! 😉\n\n*لینک دعوت تو:*\n\`${link}\`\n(روی لینک بالا کلیک کن تا کپی بشه)\n\n*چطوری؟ اینجوری:*\n- هر خریدی که دوستات بکنن، *۲۵ درصدش* مستقیم میره تو جیب تو!\n- حتی اگه دوستات هم کسی رو دعوت کنن، *۵ درصد* از خرید اونها هم برای توئه!\n\nهمین الان لینک رو برای دوستات بفرست و تیم خودت رو بساز!`,
+
+        // Registration
+        registrationWelcome: "👋 سلام، به بات ادرلend خوش آمدید.\nبرای شروع فرآیند ثبت‌نام در سرور، روی دکمه زیر کلیک کنید.",
+        btnStartRegistration: "📝 ثبت نام در سرور",
+        promptEdition: "لطفا نسخه بازی خود را انتخاب کنید:",
+        btnJavaEdition: "☕️ جاوا ادیشن",
+        btnBedrockEdition: "📱 بدراک ادیشن",
+        promptUsername: "✅ نسخه بازی شما ثبت شد.\n\nلطفاً نام کاربری دقیق خود را در بازی وارد کنید:",
+        errorInvalidUsername: "⚠️ نام کاربری نامعتبر است.\nنام کاربری باید بین ۳ تا ۱۶ کاراکتر باشد و فقط شامل حروف انگلیسی، اعداد و خط زیر (_) باشد. لطفاً دوباره تلاش کنید.",
+        errorUsernameTaken: (admin) => `شما مجاز به استفاده از این نام کاربری نیستید زیرا توسط فرد دیگری گرفته شده است.\nبه راهنمایی نیاز دارید؟؟؟ به @${admin} پیام بدید`,
+        promptAge: (username) => `✅ نام کاربری "${username}" ثبت شد.\n\nلطفا سن خود را وارد کنید\nمانند: \`15\``,
+        errorInvalidAge: "⚠️ سن وارد شده معتبر نیست. لطفاً یک عدد بین ۱۰ تا ۷۰ وارد کنید.",
+        // <<<< CHANGE START >>>>
+        // این متن نیز اصلاح شد تا فقط نام کاربری ادمین escape شود و فرمت MarkdownV2 به هم نریزد.
+        registrationSuccess: (admin) => `✅ ثبت‌نام اولیه شما با موفقیت انجام شد!\\n\\nاین کد ثبت‌نام شماست\\. لطفاً آن را کپی کرده و برای ادمین پشتیبانی (@${admin.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&')}) ارسال کنید تا ثبت‌نام شما نهایی شود\\.`,
+        // <<<< CHANGE END >>>>
+        errorRegistrationFailed: "❌ متاسفانه در مرحله آخر ثبت‌نام خطایی رخ داد. لطفاً بعداً دوباره تلاش کنید.",
+
+        // Admin Commands
+        usageDelCommand: "استفاده صحیح: `/del <UUID>`",
+        delSuccess: (uuid) => `✅ درخواست ثبت‌نام با UUID \`${uuid}\` با موفقیت حذف شد.`,
+        delNotFound: (uuid) => `⚠️ درخواستی با UUID \`${uuid}\` پیدا نشد.`,
+        delError: "❌ خطایی در هنگام حذف از دیتابیس رخ داد.",
+
+        // Wizard Messages
+        wizardCancelled: "عملیات لغو شد.",
+        wizardError: "یک خطای پیش‌بینی نشده در ویزارد رخ داد. عملیات لغو شد.",
+        btnCancelAndBack: "❌ لغو و بازگشت",
+        // Add Server Wizard
+        promptServerPort: "عالی! حالا پورت سرور را وارد کنید:",
+        promptServerPassword: "بسیار خب. حالا رمز (password) سرور RCON را وارد کنید:",
+        promptServerName: "و در آخر، چه نامی برای این سرور ذخیره شود؟ (این نام باید یکتا باشد)",
+        testingConnection: (name) => `⏳ سرور "${name}" ذخیره شد. در حال تست اتصال...`,
+        connectionSuccess: "✅ سرور با موفقیت ذخیره و اتصال به آن تست شد!",
+        errorServerDuplicate: (name) => `⚠️ خطا: سروری با نام "${name}" از قبل وجود دارد. لطفاً دوباره تلاش کنید.`,
+        errorConnectionFailed: "❌ سرور ذخیره شد، اما اتصال به RCON ناموفق بود. لطفاً اطلاعات را بررسی کنید.",
+        btnRetryConnection: "🔁 تلاش مجدد برای اتصال",
+        btnEditServer: "✏️ ویرایش اطلاعات سرور",
+        // Add Admin Wizard
+        promptAdminName: (id) => `شناسه کاربر (${id}) دریافت شد. حالا یک نام برای این ادمین وارد کنید:`,
+        errorInvalidAdminId: "خطا: لطفاً یک شناسه عددی معتبر وارد کنید یا یک پیام از کاربر مورد نظر فوروارد کنید.",
+        addAdminSuccess: (name, id) => `✅ ادمین جدید با نام "${name}" و شناسه "${id}" با موفقیت اضافه شد.`,
+        errorAdminDuplicate: "⚠️ این کاربر از قبل ادمین است.",
+        errorAddAdminFailed: "❌ خطایی در ذخیره ادمین رخ داد.",
+
+        // Rank Manager
+        rankManagerTitle: "📋 *مدیریت لیست رنک‌ها*",
+        rankManagerConfiguredGroups: "گروه‌های تنظیم شده فعلی \\(به ترتیب نمایش\\)",
+        rankManagerNoGroups: "هنوز هیچ گروهی برای نمایش تنظیم نشده است\\.",
+        btnRankMgrAddGroup: "➕ افزودن گروه",
+        btnRankMgrDeleteGroup: "➖ حذف گروه",
+        btnRankMgrSort: "↕️ تغییر ترتیب",
+        btnRankMgrAddTime: "⏰ افزودن زمان",
+        btnRankMgrSettings: "⚙️ تنظیمات ارسال",
+        btnRankMgrExit: "❌ خروج",
+        gettingGroupList: "در حال دریافت لیست گروه‌ها...",
+        errorAllGroupsAdded: "تمام گروه‌های ممکن قبلاً اضافه شده‌اند.",
+        promptAddGroup: "کدام گروه را می‌خواهید اضافه کنید؟",
+        promptGroupDisplayName: (groupName) => `نام نمایشی که می‌خواهید برای گروه \`${groupName}\` استفاده شود را وارد کنید (مثلاً: ادمین‌ها)`,
+        promptGroupTemplate: "عالی! حالا **قالب کلی گروه** را ارسال کنید.\n- `#t`: نام نمایشی گروه\n- `#p`: لیست بازیکنان\n*نمونه:*\n`--- 👑 #t 👑 ---\n#p`",
+        promptPlayerTemplate: "بسیار خب! حالا **قالب هر بازیکن** را ارسال کنید.\n- `#p`: نام بازیکن\n- `#t`: زمان باقی‌مانده\n*نمونه:*\n`- #p | #t`",
+        addGroupSuccess: (displayName) => `✅ گروه *${displayName}* با موفقیت اضافه شد.`,
+        errorAddGroupFailed: "❌ خطایی در ذخیره گروه رخ داد.",
+        errorNoGroupsToDelete: "هیچ گروهی برای حذف وجود ندارد.",
+        promptDeleteGroup: "کدام گروه را می‌خواهید حذف کنید؟",
+        deleteGroupSuccess: (groupName) => `گروه ${groupName} با موفقیت حذف شد.`,
+        btnSaveChangesAndBack: "✅ ذخیره و بازگشت",
+        promptSortGroups: "ترتیب نمایش گروه‌ها را با دکمه‌های 🔼 و 🔽 تنظیم کنید:",
+        promptAddTimeSelectGroups: "می‌خواهید به کدام گروه‌ها زمان اضافه کنید؟ (می‌توانید چند مورد را انتخاب کنید)",
+        errorSelectAtLeastOneGroup: "لطفاً حداقل یک گروه را انتخاب کنید.",
+        promptAddTimeAmount: (groups) => `گروه‌های انتخاب شده: \`${groups}\`\n\nچه مقدار زمان می‌خواهید اضافه کنید؟`,
+        errorSelectTimeAmount: "لطفاً مقدار زمانی برای افزودن انتخاب کنید.",
+        addingTimeInProgress: "⏳ در حال افزودن زمان به بازیکنان...",
+        addTimeSuccess: (success, error) => `✅ عملیات انجام شد.\n- گروه‌های موفق: ${success}\n- گروه‌های ناموفق: ${error}`,
+        btnNext: "بعدی »",
+        btnConfirm: "✅ تایید",
+        timeAdjustmentDisplay: (d, h, m) => `زمان اضافه شده: ${d} روز, ${h} ساعت, ${m} دقیقه`,
+        btnSub5Min: "-5 دقیقه",
+        btnAdd5Min: "+5 دقیقه",
+        btnSub1Hour: "-1 ساعت",
+        btnAdd1Hour: "+1 ساعت",
+        btnSub1Day: "-1 روز",
+        btnAdd1Day: "+1 روز",
+        settingCurrentInterval: (interval) => `⏰ زمان ارسال: ${interval} دقیقه`,
+        promptSetInterval: "بازه زمانی برای ارسال خودکار لیست رنک‌ها را تنظیم کنید (0 برای غیرفعال کردن):",
+        settingsSavedAndApplied: "تنظیمات ذخیره و اعمال شد!",
+        settingsSavedRestartNeeded: "تنظیمات ذخیره شد! برای اعمال، نیاز به ری‌استارت بات است.",
+    },
+    en: {
+        // ... (تمام بخش‌های قبلی بدون تغییر باقی می‌مانند) ...
+
+        // Wizard Messages
+        wizardCancelled: "Operation cancelled.",
+        wizardError: "An unexpected error occurred in the wizard. Operation cancelled.",
+        btnCancelAndBack: "❌ Cancel and Go Back",
+        // Add Server Wizard
+        promptServerPort: "Great! Now enter the server port:",
+        promptServerPassword: "Alright. Now enter the RCON server password:",
+        promptServerName: "Finally, what name should this server be saved as? (This name must be unique)",
+        testingConnection: (name) => `⏳ Server "${name}" saved. Testing connection...`,
+        connectionSuccess: "✅ Server successfully saved and connection tested!",
+        errorServerDuplicate: (name) => `⚠️ Error: A server with the name "${name}" already exists. Please try again.`,
+        errorConnectionFailed: "❌ Server was saved, but the RCON connection failed. Please check the information.",
+        btnRetryConnection: "🔁 Retry Connection",
+        btnEditServer: "✏️ Edit Server Info",
+        // Add Admin Wizard
+        promptAdminName: (id) => `User ID (${id}) received. Now, enter a name for this admin:`,
+        errorInvalidAdminId: "Error: Please enter a valid numeric ID or forward a message from the target user.",
+        addAdminSuccess: (name, id) => `✅ New admin "${name}" with ID "${id}" was added successfully.`,
+        errorAdminDuplicate: "⚠️ This user is already an admin.",
+        errorAddAdminFailed: "❌ An error occurred while saving the admin.",
+        
+        // Rank Manager
+        rankManagerTitle: "📋 *Rank List Management*",
+        rankManagerConfiguredGroups: "Currently configured groups (in display order)",
+        rankManagerNoGroups: "No groups have been configured for display yet\\.",
+        btnRankMgrAddGroup: "➕ Add Group",
+        btnRankMgrDeleteGroup: "➖ Delete Group",
+        btnRankMgrSort: "↕️ Change Order",
+        btnRankMgrAddTime: "⏰ Add Time",
+        btnRankMgrSettings: "⚙️ Sending Settings",
+        btnRankMgrExit: "❌ Exit",
+        gettingGroupList: "Getting group list...",
+        errorAllGroupsAdded: "All possible groups have already been added.",
+        promptAddGroup: "Which group do you want to add?",
+        promptGroupDisplayName: (groupName) => `Enter the display name you want to use for the \`${groupName}\` group (e.g., Admins)`,
+        promptGroupTemplate: "Great! Now, send the **overall group template**.\n- `#t`: Group display name\n- `#p`: Player list\n*Example:*\n`--- 👑 #t 👑 ---\n#p`",
+        promptPlayerTemplate: "Alright! Now, send the **template for each player**.\n- `#p`: Player name\n- `#t`: Time remaining\n*Example:*\n`- #p | #t`",
+        addGroupSuccess: (displayName) => `✅ Group *${displayName}* was added successfully.`,
+        errorAddGroupFailed: "❌ An error occurred while saving the group.",
+        errorNoGroupsToDelete: "There are no groups to delete.",
+        promptDeleteGroup: "Which group do you want to delete?",
+        deleteGroupSuccess: (groupName) => `Group ${groupName} was successfully deleted.`,
+        btnSaveChangesAndBack: "✅ Save and Back",
+        promptSortGroups: "Set the display order of the groups with the 🔼 and 🔽 buttons:",
+        promptAddTimeSelectGroups: "Which groups do you want to add time to? (You can select multiple)",
+        errorSelectAtLeastOneGroup: "Please select at least one group.",
+        promptAddTimeAmount: (groups) => `Selected groups: \`${groups}\`\n\nHow much time do you want to add?`,
+        errorSelectTimeAmount: "Please select an amount of time to add.",
+        addingTimeInProgress: "⏳ Adding time to players...",
+        addTimeSuccess: (success, error) => `✅ Operation complete.\n- Successful groups: ${success}\n- Failed groups: ${error}`,
+        btnNext: "Next »",
+        btnConfirm: "✅ Confirm",
+        timeAdjustmentDisplay: (d, h, m) => `Time to add: ${d} days, ${h} hours, ${m} minutes`,
+        btnSub5Min: "-5 min",
+        btnAdd5Min: "+5 min",
+        btnSub1Hour: "-1 hour",
+        btnAdd1Hour: "+1 hour",
+        btnSub1Day: "-1 day",
+        btnAdd1Day: "+1 day",
+        settingCurrentInterval: (interval) => `⏰ Sending interval: ${interval} minutes`,
+        promptSetInterval: "Set the time interval for automatically sending the rank list (0 to disable):",
+        settingsSavedAndApplied: "Settings saved and applied!",
+        settingsSavedRestartNeeded: "Settings saved! A bot restart is required to apply them.",
+    }
+};
+
+/**
+ * Retrieves a translated text string.
+ */
+function getText(userLang, key, ...args) {
+    const lang = languages[userLang] ? userLang : 'fa';
+    const template = languages[lang][key] || key;
+
+    if (typeof template === 'function') {
+        return template(...args);
+    }
+    return template;
+}
+
+module.exports = {
+    getText
+};
