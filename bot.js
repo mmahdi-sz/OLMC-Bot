@@ -35,10 +35,12 @@ function escapeMarkdown(text) {
     return text.replace(/[_*[\]()`]/g, '\\$&');
 }
 
-function escapeMarkdownV2(text) {
-    if (typeof text !== 'string') return '';
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
-}
+// **تغییر: این تابع escapeMarkdownV2 در اینجا دیگر استفاده نمی‌شود**
+// **منطق escape کردن کاراکترهای MarkdownV2 برای نام ادمین پشتیبانی به فایل i18n.js منتقل خواهد شد.**
+// function escapeMarkdownV2(text) {
+//     if (typeof text !== 'string') return '';
+//     return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+// }
 
 async function sendLanguageSelectionMenu(bot, chatId) {
     const message = getText('fa', 'choose_language_prompt');
@@ -325,7 +327,9 @@ async function main() {
             const registration = await db.getRegistrationByTelegramId(userId);
             if (registration) {
                 if (registration.status === 'pending') {
-                    const message = getText(userLang, 'greeting_user_pending', escapeMarkdownV2(supportAdminUsername), registration.uuid);
+                    // **تغییر:** فراخوانی `escapeMarkdownV2` از اینجا حذف شد.
+                    // منطق escape کردن اکنون به عهده `getText` در `i18n.js` خواهد بود.
+                    const message = getText(userLang, 'greeting_user_pending', supportAdminUsername, registration.uuid);
                     return bot.sendMessage(chatId, message, { parse_mode: 'MarkdownV2' });
                 }
                 
@@ -647,7 +651,7 @@ async function main() {
                 const cleanedResponse = response.replace(/§./g, '');
                 bot.sendMessage(chatId, `<code>${cleanedResponse || '(No response)'}</code>`, { parse_mode: 'HTML' });
             } catch (error) {
-                logger.error('RCON_SESSION', `Error sending command for user ${userId}`, { error: error.message });
+                    logger.error('RCON_SESSION', `Error sending command for user ${userId}`, { error: error.message });
                 bot.sendMessage(chatId, `Error sending command: ${error.message}`);
             }
         }
