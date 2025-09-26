@@ -1,27 +1,26 @@
 // handlers/callbackHandler.js
 
-const { Rcon } = require('rcon-client');
 const rankManager = require('./rankManager.js');
-const wizardHandler = require('./wizardHandler.js');
+const db = require('../database.js'); // db is needed for wizards, etc.
 const logger = require('../logger.js');
 const { getText } = require('../i18n.js');
+const registrationHandler = require('./registrationHandler.js'); // Ensure it's required at the top
 
 const MODULE_NAME = 'CALLBACK_HANDLER';
 
 /**
- * Escapes characters for Telegram's MarkdownV2 parse mode.
+ * Helper function to send a "permission denied" alert.
  */
-function escapeMarkdownV2(text) {
-    if (typeof text !== 'string') return '';
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+function answerPermissionDenied(bot, callbackQueryId, userLang) {
+    // You should add this key to your i18n.js file
+    // fa: { permission_denied: "شما اجازه انجام این کار را ندارید." }
+    // en: { permission_denied: "You do not have permission to do this." }
+    const alertText = getText(userLang, 'permission_denied', "شما اجازه دسترسی ندارید.");
+    return bot.answerCallbackQuery(callbackQueryId, { text: alertText, show_alert: true });
 }
 
-/**
- * Displays the main admin management panel.
- */
-async function showAdminPanel(bot, db, callbackQuery, userLang = 'fa') {
-    const chatId = callbackQuery.message.chat.id;
-    const messageId = callbackQuery.message.message_id;
+async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
+    const { message: { chat: { id: chatId }, message_id: messageId } } = callbackQuery;
     const keyboard = {
         inline_keyboard: [
             [{ text: getText(userLang, 'btnAddAdmin'), callback_data: 'add_admin' }],
@@ -30,36 +29,22 @@ async function showAdminPanel(bot, db, callbackQuery, userLang = 'fa') {
             [{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]
         ]
     };
-    const messageText = getText(userLang, 'adminPanelTitle');
-
     try {
-        if (messageId) {
-            await bot.editMessageText(messageText, {
-                chat_id: chatId,
-                message_id: messageId,
-                reply_markup: keyboard
-            });
-        } else {
-            await bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
-        }
+        await bot.editMessageText(getText(userLang, 'adminPanelTitle'), {
+            chat_id: chatId, message_id: messageId, reply_markup: keyboard
+        });
     } catch (error) {
         if (!error.message.includes('message is not modified')) {
-            logger.warn(MODULE_NAME, "Could not edit admin panel message, sending a new one.", { error: error.message });
-            await bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
+            logger.warn(MODULE_NAME, "Could not edit admin panel message.", { error: error.message });
         }
     }
 }
 
-/**
- * Displays the RCON server management menu.
- */
-async function showServerMenu(bot, context, db, isSuperAdmin, superAdminId, userLang = 'fa') {
-    const isCallback = typeof context === 'object' && context.message;
-    const chatId = isCallback ? context.message.chat.id : context;
-    const messageId = isCallback ? context.message.message_id : null;
-
+async function showServerMenu(bot, callbackQuery, db, isSuperAdmin, userLang = 'fa') {
+    const { message: { chat: { id: chatId }, message_id: messageId }, from: { id: userId } } = callbackQuery;
     try {
-        const userServers = await db.getServers(superAdminId);
+        // Only super admin can manage servers, so we fetch their servers.
+        const userServers = await db.getServers(isSuperAdmin ? userId : appConfig.superAdminId);
         const serverButtons = userServers.map(server => ([{ text: `🔌 ${server.name}`, callback_data: `connect_${server.name}` }]));
         
         const keyboardRows = [...serverButtons];
@@ -71,208 +56,168 @@ async function showServerMenu(bot, context, db, isSuperAdmin, superAdminId, user
         keyboardRows.push([{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]);
         
         const keyboard = { inline_keyboard: keyboardRows };
-        const messageText = userServers.length > 0
-            ? getText(userLang, 'rconMenuTitle')
-            : getText(userLang, 'rconMenuTitleNoServers');
+        const messageText = userServers.length > 0 ? getText(userLang, 'rconMenuTitle') : getText(userLang, 'rconMenuTitleNoServers');
 
-        if (isCallback && messageId) {
-            await bot.editMessageText(messageText, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
-        } else {
-            await bot.sendMessage(chatId, messageText, { reply_markup: keyboard });
-        }
+        await bot.editMessageText(messageText, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
     } catch (error) {
-        if (!(isCallback && error.message.includes('message is not modified'))) {
-            logger.error(MODULE_NAME, `An error occurred in showServerMenu for user ${chatId}`, { error: error.message, stack: error.stack });
-            await bot.sendMessage(chatId, getText(userLang, 'errorMenu'), { reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]] } });
+        if (!error.message.includes('message is not modified')) {
+            logger.error(MODULE_NAME, `Error in showServerMenu for user ${userId}`, { error: error.message });
         }
     }
 }
 
-/**
- * Handles all callback queries for the bot.
- */
-// <<<< CHANGE START >>>>
-// پارامتر جدید handleStartCommand به انتهای لیست پارامترها اضافه شد.
-async function handleCallback(bot, callbackQuery, db, activeConnections, superAdminId, mainBotUsername, setupRankListCron, handleStartCommand) {
+
+// <<<< CHANGE START >>>> (Simplified parameters and structure)
+async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCron, startCommandHandler) {
 // <<<< CHANGE END >>>>
-    const action = callbackQuery.data;
-    const msg = callbackQuery.message;
-    const chatId = msg.chat.id;
-    const userId = callbackQuery.from.id;
-    const messageId = msg.message_id;
+    const { data: action, message: msg, from: { id: userId } } = callbackQuery;
+    const { chat: { id: chatId }, message_id: messageId } = msg;
 
     logger.info(MODULE_NAME, `Callback received`, { userId, chatId, action });
 
-    const isSuperAdmin = (userId === superAdminId);
-    
-    const userLang = await db.getUserLanguage(userId) || 'fa';
+    const isSuperAdmin = (userId === appConfig.superAdminId);
+    const userLang = await db.getUserLanguage(userId);
 
     try {
-        // <<<< CHANGE START >>>>
-        // بخش مدیریت انتخاب زبان به طور کامل بازنویسی شد
+        // --- Universal Handlers ---
         if (action.startsWith('set_lang_')) {
-            const langCode = action.split('_').pop(); // 'fa' or 'en'
+            const langCode = action.split('_').pop();
             await db.setUserLanguage(userId, langCode);
-            
             await bot.answerCallbackQuery(callbackQuery.id, { text: getText(langCode, 'language_changed') });
-            
-            // ابتدا پیام قدیمی را حذف می‌کنیم
             await bot.deleteMessage(chatId, messageId);
-
-            // به جای bot.emit، از فراخوانی مستقیم و پایدار تابع handleStartCommand استفاده می‌کنیم
-            const fakeMsg = { 
-                ...msg, 
-                text: '/start', // متن دستور
-                from: { id: userId }, // اطلاعات فرستنده
-                chat: { id: chatId } // اطلاعات چت
-            };
-            await handleStartCommand(bot, fakeMsg);
-            
-            return; // پردازش را در همینجا تمام می‌کنیم
+            // <<<< CHANGE START >>>> (Problem 10: Removed fake message object)
+            // Directly call the start command handler.
+            return startCommandHandler(bot, { ...msg, text: '/start' }, ['/start'], appConfig, db);
+            // <<<< CHANGE END >>>>
         }
-        // <<<< CHANGE END >>>>
 
         if (action.startsWith('rankmgr_') || action.startsWith('rank_interval_')) {
-            await bot.answerCallbackQuery(callbackQuery.id);
-            logger.debug(MODULE_NAME, `Routing to RankManager`, { action });
+            // <<<< CHANGE START >>>> (Problem 12: Permission Feedback)
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            // <<<< CHANGE END >>>>
             return rankManager.handleRankManagerCallback(bot, callbackQuery, db, setupRankListCron);
         }
+
         if (action.startsWith('register_')) {
-            logger.debug(MODULE_NAME, `Routing to RegistrationHandler`, { action });
-            // نکته: برای جلوگیری از خطا، require را در سطح بالای فایل قرار دهید
-            return require('./registrationHandler.js').handleRegistrationCallback(bot, callbackQuery, db);
+            return registrationHandler.handleRegistrationCallback(bot, callbackQuery, db);
+        }
+        
+        // --- Main Menu and User Actions ---
+        if (action === 'start_menu') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+             // <<<< CHANGE START >>>> (Problem 10: Removed fake message object)
+            return startCommandHandler(bot, { ...msg, text: '/start' }, ['/start'], appConfig, db);
+            // <<<< CHANGE END >>>>
+        }
+        
+        if (action === 'manage_account') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+            const message = getText(userLang, 'accountPanelTitle');
+            const keyboard = { inline_keyboard: [
+                [{ text: getText(userLang, 'btnReferralInfo'), callback_data: 'show_referral_info' }],
+                [{ text: getText(userLang, 'btnBack'), callback_data: 'user_start_menu' }]
+            ]};
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+        }
+        
+        if (action === 'show_referral_info') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+            const referralLink = `https://t.me/${appConfig.mainBotUsername}?start=${userId}`;
+            const message = getText(userLang, 'referralInfoMessage', referralLink);
+            const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]] };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+        }
+        
+        if (action === 'user_start_menu') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+            const message = getText(userLang, 'greeting_user_approved');
+            const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
         }
 
-        await bot.answerCallbackQuery(callbackQuery.id);
+        // --- Admin-only Actions ---
 
-        switch (true) {
-            case action === 'start_menu': {
-                logger.debug(MODULE_NAME, 'Executing action: start_menu');
-                // <<<< CHANGE START >>>>
-                // برای بازگشت به منوی اصلی نیز از تابع مرکزی استفاده می‌کنیم تا کد تکراری نباشد
-                const fakeMsg = { from: { id: userId }, chat: { id: chatId }, text: '/start', message_id: messageId };
-                await handleStartCommand(bot, fakeMsg);
-                // <<<< CHANGE END >>>>
-                break;
-            }
-            case action === 'rcon_menu':
-                logger.debug(MODULE_NAME, 'Executing action: rcon_menu');
-                await showServerMenu(bot, callbackQuery, db, isSuperAdmin, superAdminId, userLang);
-                break;
+        // Permission check for all subsequent admin actions
+        const isRegularAdmin = await db.isAdmin(userId);
+        if (!isSuperAdmin && !isRegularAdmin) {
+            return answerPermissionDenied(bot, callbackQuery.id, userLang);
+        }
 
-            case action === 'manage_rank_list':
-                logger.debug(MODULE_NAME, 'Executing action: manage_rank_list');
-                if (!isSuperAdmin) return;
-                await bot.deleteMessage(chatId, messageId);
-                await rankManager.startRankManager(bot, msg, db, setupRankListCron);
-                break;
+        await bot.answerCallbackQuery(callbackQuery.id); // Answer query for all admin actions
 
-            case action === 'manage_account': {
-                 logger.debug(MODULE_NAME, 'Executing action: manage_account');
-                 const message = getText(userLang, 'accountPanelTitle');
-                 const keyboard = { inline_keyboard: [
-                     [{ text: getText(userLang, 'btnReferralInfo'), callback_data: 'show_referral_info' }],
-                     [{ text: getText(userLang, 'btnBack'), callback_data: 'user_start_menu' }]
-                 ]};
-                 await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
-                 break;
-            }
-            case action === 'show_referral_info': {
-                logger.debug(MODULE_NAME, 'Executing action: show_referral_info');
-                const referralLink = `https://t.me/${mainBotUsername}?start=${userId}`;
-                const message = getText(userLang, 'referralInfoMessage', referralLink);
-                const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]] };
-                await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
-                break;
-            }
-            case action === 'user_start_menu': {
-                logger.debug(MODULE_NAME, 'Executing action: user_start_menu');
-                const message = getText(userLang, 'greeting_user_approved');
-                const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
-                await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
-                break;
-            }
+        if (action === 'rcon_menu') {
+            return showServerMenu(bot, callbackQuery, db, isSuperAdmin, userLang);
+        }
 
-            case action === 'admin_panel':
-                logger.debug(MODULE_NAME, 'Executing action: admin_panel');
-                if (isSuperAdmin) await showAdminPanel(bot, db, callbackQuery, userLang);
-                break;
-            case action === 'add_admin':
-                if (!isSuperAdmin) return;
-                await db.setWizardState(userId, 'add_admin', 'awaiting_admin_id', {});
-                await bot.editMessageText(getText(userLang, 'promptAddAdmin'), { chat_id: chatId, message_id: messageId });
-                break;
-            case action === 'list_admins': {
-                if (!isSuperAdmin) return;
+        if (action === 'manage_rank_list') {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            await bot.deleteMessage(chatId, messageId);
+            return rankManager.startRankManager(bot, msg, db, setupRankListCron);
+        }
+
+        if (action === 'admin_panel') {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            return showAdminPanel(bot, callbackQuery, userLang);
+        }
+
+        if (action === 'add_admin') {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            await db.setWizardState(userId, 'add_admin', 'awaiting_admin_id', {});
+            return bot.editMessageText(getText(userLang, 'promptAddAdmin'), { chat_id: chatId, message_id: messageId });
+        }
+
+        if (action === 'list_admins') {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            const admins = await db.getAdmins();
+            const adminList = admins.length === 0
+                ? getText(userLang, 'noAdminsFound')
+                : `${getText(userLang, 'adminListTitle')}\n\n` + admins.map(admin => 
+                    `${getText(userLang, 'adminListEntryName')}: ${admin.name.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&')}\n` +
+                    `${getText(userLang, 'adminListEntryId')}: \`${admin.user_id}\``
+                  ).join('\n\n');
+            return bot.editMessageText(adminList, { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2', reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]] } });
+        }
+
+        if (action.startsWith('remove_admin_')) {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            const parts = action.split('_');
+            const stage = parts[2];
+            const adminIdToRemove = parts[3];
+
+            if (stage === 'prompt') {
                 const admins = await db.getAdmins();
-                let adminList = `${getText(userLang, 'adminListTitle')}\n\n`;
-                if (admins.length === 0) {
-                    adminList = getText(userLang, 'noAdminsFound');
-                } else {
-                    admins.forEach(admin => {
-                        adminList += `${getText(userLang, 'adminListEntryName')}: ${escapeMarkdownV2(admin.name)}\n${getText(userLang, 'adminListEntryId')}: \`${admin.user_id}\`\n\n`;
-                    });
-                }
-                await bot.editMessageText(adminList, { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2', reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]] } });
-                break;
+                if (admins.length === 0) return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'noAdminsToRemove'), show_alert: true });
+                const adminButtons = admins.map(admin => ([{ text: `🗑️ ${admin.name}`, callback_data: `remove_admin_confirm_${admin.user_id}` }]));
+                adminButtons.push([{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]);
+                return bot.editMessageText(getText(userLang, 'promptRemoveAdmin'), { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: adminButtons } });
+            } 
+            if (stage === 'confirm') {
+                const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnCancel'), callback_data: 'admin_panel' }, { text: getText(userLang, 'btnConfirmDelete'), callback_data: `remove_admin_execute_${adminIdToRemove}` }]] };
+                return bot.editMessageText(getText(userLang, 'confirmRemoveAdmin', adminIdToRemove), { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
             }
-            case action.startsWith('remove_admin'): {
-                const parts = action.split('_');
-                const stage = parts[2];
-                const adminIdToRemove = parts[3];
-
-                if (!isSuperAdmin) return;
-
-                if (stage === 'prompt') {
-                    const admins = await db.getAdmins();
-                    if (admins.length === 0) return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'noAdminsToRemove'), show_alert: true });
-                    const adminButtons = admins.map(admin => ([{ text: `🗑️ ${admin.name}`, callback_data: `remove_admin_confirm_${admin.user_id}` }]));
-                    adminButtons.push([{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]);
-                    await bot.editMessageText(getText(userLang, 'promptRemoveAdmin'), { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: adminButtons } });
-                } else if (stage === 'confirm') {
-                    const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnCancel'), callback_data: 'admin_panel' }, { text: getText(userLang, 'btnConfirmDelete'), callback_data: `remove_admin_execute_${adminIdToRemove}` }]] };
-                    await bot.editMessageText(getText(userLang, 'confirmRemoveAdmin', adminIdToRemove), { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
-                } else if (stage === 'execute') {
-                    await db.removeAdmin(parseInt(adminIdToRemove, 10));
-                    logger.success(MODULE_NAME, `Admin ${adminIdToRemove} removed successfully.`);
-                    await showAdminPanel(bot, db, callbackQuery, userLang);
-                }
-                break;
+            if (stage === 'execute') {
+                await db.removeAdmin(parseInt(adminIdToRemove, 10));
+                logger.success(MODULE_NAME, `Admin ${adminIdToRemove} removed successfully.`);
+                return showAdminPanel(bot, callbackQuery, userLang);
             }
-
-            case action === 'add_server':
-                if (!isSuperAdmin) return;
-                await db.setWizardState(userId, 'add_server', 'awaiting_ip', {});
-                await bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId });
-                break;
-            case action.startsWith('remove_server'): {
-                // ...
-                break;
-            }
-            
-            case action.startsWith('connect_'): {
-                // ...
-                break;
-            }
-
-            case action.startsWith('rcon_retry_connect_'): {
-                // ...
-                break;
-            }
-
-            case action.startsWith('rcon_edit_server_'): {
-                // ...
-                break;
-            }
-            
-            default:
-                logger.warn(MODULE_NAME, `Unknown callback action received`, { action, userId });
         }
+        
+        // RCON server management (only Super Admin)
+        if (action === 'add_server') {
+            if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
+            await db.setWizardState(userId, 'add_server', 'awaiting_ip', {});
+            return bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId });
+        }
+
+        // Fallback for unknown actions
+        logger.warn(MODULE_NAME, `Unknown callback action received`, { action, userId });
+
     } catch (e) {
-        if (!e.message.includes('message is not modified')) {
+        if (!e.message?.includes('message is not modified')) {
              logger.error(MODULE_NAME, `A critical error occurred for action "${action}"`, { error: e.message, stack: e.stack });
         }
     }
 }
 
-module.exports = { handleCallback, showServerMenu, showAdminPanel };
+// The export signature is simplified as only handleCallback is needed externally now.
+module.exports = { handleCallback };

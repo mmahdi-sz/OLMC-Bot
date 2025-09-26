@@ -39,7 +39,7 @@ async function initDb() {
         await connection.execute(`CREATE TABLE IF NOT EXISTS admins (user_id BIGINT PRIMARY KEY, name VARCHAR(255) NOT NULL, added_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         // User Links Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS user_links (telegram_user_id BIGINT PRIMARY KEY, ingame_username VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
-        // Settings Table
+        // Settings Table (will also store player_list_message_id)
         await connection.execute(`CREATE TABLE IF NOT EXISTS settings (\`key\` VARCHAR(255) PRIMARY KEY, value TEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
 
         try {
@@ -52,32 +52,28 @@ async function initDb() {
 
         // Rank List Groups Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS rank_list_groups (id INT PRIMARY KEY AUTO_INCREMENT, group_name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, group_template TEXT NOT NULL, player_template TEXT NOT NULL, sort_order INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
-        // Registrations Table
-        await connection.execute(`CREATE TABLE IF NOT EXISTS registrations (id INT PRIMARY KEY AUTO_INCREMENT, telegram_user_id BIGINT NOT NULL UNIQUE, game_edition VARCHAR(10) NOT NULL, game_username VARCHAR(255) NOT NULL, age INT NOT NULL, uuid VARCHAR(16) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', referrer_telegram_id BIGINT DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // --- Language Column Migration ---
+        // <<<< CHANGE START >>>>
+        // Registrations Table (language_code column removed)
+        await connection.execute(`CREATE TABLE IF NOT EXISTS registrations (id INT PRIMARY KEY AUTO_INCREMENT, telegram_user_id BIGINT NOT NULL UNIQUE, game_edition VARCHAR(10) NOT NULL, game_username VARCHAR(255) NOT NULL, age INT NOT NULL, uuid VARCHAR(16) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', referrer_telegram_id BIGINT DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+        // --- Migration to remove the old language_code column ---
         try {
-            await connection.execute(`ALTER TABLE registrations ADD COLUMN language_code VARCHAR(5) DEFAULT 'fa'`);
-            logger.info(MODULE_NAME, "Column 'language_code' added to 'registrations' table.");
+            await connection.execute(`ALTER TABLE registrations DROP COLUMN language_code`);
+            logger.info(MODULE_NAME, "Column 'language_code' successfully dropped from 'registrations' table.");
         } catch (error) {
-            if (error.code === 'ER_DUP_FIELDNAME') {
-                logger.debug(MODULE_NAME, "Column 'language_code' already exists in 'registrations' table.");
+            if (error.code === 'ER_CANT_DROP_FIELD_OR_KEY') {
+                logger.debug(MODULE_NAME, "Column 'language_code' does not exist in 'registrations' table, skipping drop.");
             } else {
-                throw error;
+                // Log other errors but don't crash the app
+                logger.error(MODULE_NAME, "An error occurred while trying to drop 'language_code' column.", { code: error.code, message: error.message });
             }
         }
-        
-        const [updateResult] = await connection.execute(`UPDATE registrations SET language_code = 'fa' WHERE language_code IS NULL OR language_code = ''`);
-        if (updateResult.affectedRows > 0) {
-            logger.info(MODULE_NAME, `Updated language_code for ${updateResult.affectedRows} existing users to 'fa'.`);
-        }
+        // <<<< CHANGE END >>>>
         
         // Wizard States Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS wizard_states (user_id BIGINT PRIMARY KEY, wizard_type VARCHAR(50) NOT NULL, step VARCHAR(50) NOT NULL, data JSON, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // <<<< CHANGE START >>>>
-        // بخش جدید: ایجاد جدول تنظیمات کاربران
-        // این جدول برای ذخیره زبان و سایر تنظیمات کاربر، حتی قبل از ثبت‌نام کامل، استفاده می‌شود.
+        // User Settings Table (Single Source of Truth for user preferences)
         await connection.execute(`
             CREATE TABLE IF NOT EXISTS user_settings (
                 telegram_user_id BIGINT PRIMARY KEY,
@@ -85,7 +81,6 @@ async function initDb() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
         logger.info(MODULE_NAME, "Table 'user_settings' is ready.");
-        // <<<< CHANGE END >>>>
 
         logger.success(MODULE_NAME, 'Schema initialization complete.');
     } catch (error) {
@@ -159,54 +154,34 @@ async function getUserLink(telegramUserId) {
 }
 
 // <<<< CHANGE START >>>>
-// --- User Language Management (بخش بازنویسی شده) ---
+// --- User Language Management (Refactored) ---
 
 /**
- * زبان کاربر را در جدول user_settings ذخیره یا به‌روزرسانی می‌کند.
- * این تابع هم برای کاربران جدید و هم قدیمی کار می‌کند.
+ * Sets or updates a user's language in the `user_settings` table.
+ * This is now the single source of truth for user language.
  */
 async function setUserLanguage(telegramUserId, languageCode) {
-    // این دستور اگر کاربر در جدول تنظیمات وجود نداشته باشد او را اضافه می‌کند (INSERT)
-    // و اگر وجود داشته باشد، زبانش را آپدیت می‌کند (UPDATE).
     const sql = "INSERT INTO user_settings (telegram_user_id, language_code) VALUES (?, ?) ON DUPLICATE KEY UPDATE language_code = VALUES(language_code)";
     const [result] = await executeAndLog(sql, [telegramUserId, languageCode]);
-
-    // برای هماهنگی داده‌ها، سعی می‌کنیم زبان را در جدول ثبت‌نام هم آپدیت کنیم
-    // این کار برای کاربرانی است که از قبل ثبت‌نام کرده‌اند.
-    try {
-        const updateRegSql = "UPDATE registrations SET language_code = ? WHERE telegram_user_id = ?";
-        await executeAndLog(updateRegSql, [languageCode, telegramUserId]);
-    } catch (e) {
-        // اگر کاربر هنوز ثبت‌نام نکرده باشد، این بخش خطا می‌دهد که طبیعی است و نادیده گرفته می‌شود.
-        logger.debug(MODULE_NAME, `User ${telegramUserId} not in registrations table yet, skipping language update there.`);
-    }
-
     return result.affectedRows;
 }
 
 /**
- * زبان کاربر را بازیابی می‌کند.
- * ابتدا جدول جدید user_settings را چک می‌کند، سپس جدول قدیمی registrations.
+ * Retrieves a user's language from the `user_settings` table.
+ * Returns 'fa' (Persian) as a default fallback if the user is not found.
  */
 async function getUserLanguage(telegramUserId) {
-    // 1. اولویت با جدول جدید تنظیمات است
-    let sql = "SELECT language_code FROM user_settings WHERE telegram_user_id = ? LIMIT 1";
-    let [rows] = await executeAndLog(sql, [telegramUserId]);
+    const sql = "SELECT language_code FROM user_settings WHERE telegram_user_id = ? LIMIT 1";
+    const [rows] = await executeAndLog(sql, [telegramUserId]);
 
-    if (rows.length > 0 && rows[0].language_code) {
-        return rows[0].language_code;
-    }
-
-    // 2. اگر در جدول جدید نبود، جدول قدیمی ثبت‌نام را برای سازگاری چک می‌کنیم
-    sql = "SELECT language_code FROM registrations WHERE telegram_user_id = ? LIMIT 1";
-    [rows] = await executeAndLog(sql, [telegramUserId]);
-    
-    return rows.length > 0 ? rows[0].language_code : null;
+    // Return the found language, or 'fa' if no entry exists for the user.
+    return rows.length > 0 && rows[0].language_code ? rows[0].language_code : 'fa';
 }
 // <<<< CHANGE END >>>>
 
 
 // --- Settings Management ---
+// These functions will be used to store and retrieve the player_list_message_id.
 async function setSetting(key, value) {
     const sql = "INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)";
     const [result] = await executeAndLog(sql, [key, String(value)]);
@@ -282,6 +257,7 @@ async function updateRankGroupSortOrder(groupId, direction) {
         }
 
         if (needsUpdate) {
+            // Re-normalize sort_order to be sequential
             const [sortedGroups] = await connection.execute('SELECT id FROM rank_list_groups ORDER BY sort_order ASC, id ASC');
             for (let i = 0; i < sortedGroups.length; i++) {
                 await connection.execute('UPDATE rank_list_groups SET sort_order = ? WHERE id = ?', [i, sortedGroups[i].id]);
@@ -300,12 +276,11 @@ async function updateRankGroupSortOrder(groupId, direction) {
 
 // --- Registration Management ---
 // <<<< CHANGE START >>>>
-// تابع addRegistration کمی تغییر کرد تا زبان کاربر را هم ذخیره کند
+// The addRegistration function is now simpler as it no longer handles language_code.
 async function addRegistration(data) {
-    // language_code را از دیتا استخراج می‌کنیم
-    const { telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id, language_code } = data;
-    const sql = `INSERT INTO registrations (telegram_user_id, game_edition, game_username, age, uuid, status, referrer_telegram_id, created_at, language_code) VALUES (?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP, ?) ON DUPLICATE KEY UPDATE game_edition = VALUES(game_edition), game_username = VALUES(game_username), age = VALUES(age), uuid = VALUES(uuid), status = 'pending', referrer_telegram_id = VALUES(referrer_telegram_id), created_at = CURRENT_TIMESTAMP, language_code = VALUES(language_code);`;
-    const [result] = await executeAndLog(sql, [telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id || null, language_code || 'fa']);
+    const { telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id } = data;
+    const sql = `INSERT INTO registrations (telegram_user_id, game_edition, game_username, age, uuid, status, referrer_telegram_id, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE game_edition = VALUES(game_edition), game_username = VALUES(game_username), age = VALUES(age), uuid = VALUES(uuid), status = 'pending', referrer_telegram_id = VALUES(referrer_telegram_id), created_at = CURRENT_TIMESTAMP;`;
+    const [result] = await executeAndLog(sql, [telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id || null]);
     return result;
 }
 // <<<< CHANGE END >>>>
@@ -321,7 +296,8 @@ async function getRegistrationByUuid(uuid) {
     return rows.length > 0 ? rows[0] : null;
 }
 async function getRegistrationByTelegramId(telegramUserId) {
-    const sql = "SELECT telegram_user_id, game_username, status, uuid, language_code FROM registrations WHERE telegram_user_id = ?";
+    // Note: The language_code is no longer retrieved from this table.
+    const sql = "SELECT telegram_user_id, game_username, status, uuid FROM registrations WHERE telegram_user_id = ?";
     const [rows] = await executeAndLog(sql, [telegramUserId]);
     return rows.length > 0 ? rows[0] : null;
 }

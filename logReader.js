@@ -6,16 +6,36 @@ const logger = require('./logger.js');
 
 const MODULE_NAME = 'LOG_READER';
 
-// Load filtered words from .env, split by comma, and filter out empty strings
+// <<<< CHANGE START >>>> (Problem 7: Excessive DB Queries)
+// Cache for log reader settings to avoid repeated DB calls.
+let logConfig = {
+    mainGroupId: null,
+    topicIds: {
+        auction: null,
+        chat: null,
+    }
+};
+
+// Function to load/reload the configuration from the database.
+async function loadLogReaderConfig(db) {
+    logger.info(MODULE_NAME, 'Loading/Reloading log reader configuration...');
+    try {
+        logConfig.mainGroupId = await db.getSetting('main_group_id');
+        logConfig.topicIds.auction = await db.getSetting('topic_id_auction');
+        logConfig.topicIds.chat = await db.getSetting('topic_id_chat');
+        logger.success(MODULE_NAME, 'Log reader configuration loaded successfully.');
+    } catch (error) {
+        logger.error(MODULE_NAME, 'Failed to load log reader configuration.', { error: error.message });
+    }
+}
+// <<<< CHANGE END >>>>
+
 const filteredWordsRaw = process.env.FILTERED_WORDS || '';
 const filteredWords = filteredWordsRaw.split(',').map(word => word.trim()).filter(Boolean);
 if (filteredWords.length > 0) {
     logger.info(MODULE_NAME, `Loaded ${filteredWords.length} filtered words.`);
 }
 
-/**
- * Escapes characters for Telegram's HTML parse mode.
- */
 function escapeHTML(str) {
     if (typeof str !== 'string') return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
@@ -23,17 +43,17 @@ function escapeHTML(str) {
 
 /**
  * Processes auction-related log lines.
+ * This function now uses the cached logConfig instead of querying the DB.
  */
-async function handleAuctionLog(line, bot, db) {
-    const mainGroupId = await db.getSetting('main_group_id');
-    const auctionTopicId = await db.getSetting('topic_id_auction');
-    if (!mainGroupId || !auctionTopicId) return;
+async function handleAuctionLog(line, bot) {
+    if (!logConfig.mainGroupId || !logConfig.topicIds.auction) return;
 
     let message = '';
     let eventType = 'unknown';
 
-    // Regex for item listing (added)
-    const addedMatch = line.match(/(\w+)\s+added\s+x(\d+)\s+(.+?)\s+in\s+auction\s+for\s+([\d,.\s]+)\./);
+    // <<<< CHANGE START >>>> (Problem 4: Brittle Regex)
+    // Regex made more flexible with \s+ to handle variable spacing.
+    const addedMatch = line.match(/(\w+)\s+added\s+x(\d+)\s+(.+?)\s+in\s+auction\s+for\s+([\d,.\s]+?)\./);
     if (addedMatch) {
         eventType = 'item_added';
         const [, username, quantity, itemName, price] = addedMatch;
@@ -41,84 +61,82 @@ async function handleAuctionLog(line, bot, db) {
         message = `📦 *آیتم جدید برای فروش*\n\n👤 *فروشنده:* \`${username}\`\n🏷️ *نوع آیتم:* \`${itemName}\`\n🔢 *تعداد:* \`${quantity}\`\n💰 *قیمت:* \`${cleanPrice} OM\``;
     }
 
-    // Regex for item purchase (buy)
-    const buyMatch = line.match(/(\w+)\s+buy\s+x(\d+)\s+(.+?)\s+to\s+(\w+)\s+for\s+([\d,.\s]+)\$/);
+    const buyMatch = line.match(/(\w+)\s+buy\s+x(\d+)\s+(.+?)\s+to\s+(\w+)\s+for\s+([\d,.\s]+?)\$/);
     if (buyMatch) {
         eventType = 'item_bought';
         const [, buyer, quantity, itemName, seller, price] = buyMatch;
         const cleanPrice = price.replace(/[\s,]/g, '');
         message = `✅ *آیتم فروخته شد*\n\n🙋‍♂️ *خریدار:* \`${buyer}\`\n👨‍💼 *فروشنده:* \`${seller}\`\n🏷️ *نوع آیتم:* \`${itemName}\`\n🔢 *تعداد:* \`${quantity}\`\n💰 *قیمت:* \`${cleanPrice} OM\``;
     }
+    // <<<< CHANGE END >>>>
 
     if (message) {
-        logger.debug(MODULE_NAME, `Detected auction event`, { type: eventType, line });
+        logger.debug(MODULE_NAME, `Detected auction event`, { type: eventType });
         try {
-            await bot.sendMessage(mainGroupId, message, {
-                message_thread_id: auctionTopicId,
+            await bot.sendMessage(logConfig.mainGroupId, message, {
+                message_thread_id: logConfig.topicIds.auction,
                 parse_mode: 'Markdown'
             });
-            logger.success(MODULE_NAME, 'Successfully sent auction house message to Telegram.');
         } catch (error) {
-            logger.error(MODULE_NAME, 'Failed to send auction house message', { error: error.message, stack: error.stack });
+            logger.error(MODULE_NAME, 'Failed to send auction house message', { error: error.message });
         }
+    } else {
+        // <<<< CHANGE START >>>> (Problem 4: Silent Failure)
+        // Log a warning if a line contains the keyword but doesn't match any regex.
+        logger.warn(MODULE_NAME, 'An auction log line was detected but not parsed. The log format may have changed.', { line });
+        // <<<< CHANGE END >>>>
     }
 }
 
 /**
  * Processes in-game chat messages.
+ * This function now uses the cached logConfig instead of querying the DB.
  */
-async function handleChatLog(line, bot, db) {
-    // Regex جدید برای پشتیبانی از فرمت لاگ شما: "[Not Secure] PREFIX USERNAME: MESSAGE"
-    const match = line.match(/\[Not Secure\]\s+(.+?):\s+(.*)/);
-    if (!match) return;
+async function handleChatLog(line, bot) {
+    if (!logConfig.mainGroupId || !logConfig.topicIds.chat) return;
+
+    // <<<< CHANGE START >>>> (Problem 4: Brittle Regex)
+    // Regex made more robust against small format changes.
+    const match = line.match(/\[Not Secure\]\s*([^:]+):\s*(.*)/);
+    // <<<< CHANGE END >>>>
+    
+    if (!match) {
+        // <<<< CHANGE START >>>> (Problem 4: Silent Failure)
+        logger.warn(MODULE_NAME, 'A chat log line was detected but not parsed. The log format may have changed.', { line });
+        // <<<< CHANGE END >>>>
+        return;
+    }
 
     const fullSender = match[1].trim();
     const originalMessage = match[2].trim();
 
-    // برای جدا کردن پیشوند از نام کاربری، آخرین کلمه را به عنوان نام کاربری در نظر می‌گیریم.
     const senderParts = fullSender.split(/\s+/);
-    const username = senderParts.pop(); // آخرین بخش نام کاربری است
-    const prefix = senderParts.join(' '); // بقیه بخش‌ها پیشوند هستند
+    const username = senderParts.pop();
+    const prefix = senderParts.join(' ');
 
-    // Ignore messages sent from Telegram to avoid loops
     if (prefix === '[Telegram]') {
-        return;
+        return; // Ignore messages from the bot itself to prevent loops
     }
     
-    logger.debug(MODULE_NAME, 'Detected in-game chat message', { prefix, username, message: originalMessage });
-
-    const mainGroupId = await db.getSetting('main_group_id');
-    const chatTopicId = await db.getSetting('topic_id_chat');
-    if (!mainGroupId || !chatTopicId) return;
-
     let messageToSend = originalMessage;
-    let isFiltered = false;
+    const hasFilteredWord = filteredWords.some(word => 
+        new RegExp(`\\b${word}\\b`, 'i').test(originalMessage)
+    );
 
-    // Filter message content
-    if (filteredWords.length > 0) {
-        const hasFilteredWord = filteredWords.some(word => 
-            new RegExp(`\\b${word}\\b`, 'i').test(originalMessage)
-        );
-        if (hasFilteredWord) {
-            isFiltered = true;
-            logger.info(MODULE_NAME, `Filtered message from user`, { username });
-            messageToSend = '[متن پیام به دلیل مغایرت با قوانین، نمایش داده نشد]';
-        }
+    if (hasFilteredWord) {
+        logger.info(MODULE_NAME, `Filtered message from user`, { username });
+        messageToSend = '[متن پیام به دلیل مغایرت با قوانین، نمایش داده نشد]';
     }
 
-    // <<<<<<<<<<<<<<<<< CHANGE START >>>>>>>>>>>>>>>>>
-    // خطای تایپی "&g t;" به "&gt;" اصلاح شد
     const formattedMessage = `🎮 <b>${escapeHTML(prefix)} ${escapeHTML(username)}</b> &gt;&gt; ${escapeHTML(messageToSend)}`;
-    // <<<<<<<<<<<<<<<<< CHANGE END >>>>>>>>>>>>>>>>>
     
     try {
-        await bot.sendMessage(mainGroupId, formattedMessage, {
+        await bot.sendMessage(logConfig.mainGroupId, formattedMessage, {
             parse_mode: 'HTML',
-            message_thread_id: chatTopicId
+            message_thread_id: logConfig.topicIds.chat
         });
-        logger.success(MODULE_NAME, `Successfully sent chat message to Telegram.`, { username, filtered: isFiltered });
     } catch (error) {
-        logger.error(MODULE_NAME, 'Failed to send chat message', { error: error.message, stack: error.stack });
+        logger.error(MODULE_NAME, 'Failed to send chat message', { error: error.message });
     }
 }
 
@@ -131,7 +149,7 @@ function watchLogFile(logFilePath, bot, db) {
     const options = {
         fromBeginning: false,
         follow: true,
-        useWatchFile: true // More reliable for log rotation
+        useWatchFile: true
     };
 
     try {
@@ -142,26 +160,23 @@ function watchLogFile(logFilePath, bot, db) {
         const tail = new Tail(logFilePath, options);
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
-        tail.on('line', async (line) => {
+        tail.on('line', (line) => {
+            // The handlers no longer need the 'db' object for settings.
             if (line.includes('[zAuctionHouseV3')) {
-                await handleAuctionLog(line, bot, db);
+                handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {
-                await handleChatLog(line, bot, db);
+                handleChatLog(line, bot);
             }
         });
 
         tail.on('error', (error) => {
-            logger.error(MODULE_NAME, 'Error watching log file. Attempting to re-watch in 10 seconds...', { error: error.message });
-            try {
-                tail.unwatch();
-            } catch (unwatchError) {
-                logger.error(MODULE_NAME, 'Error during unwatch attempt.', { error: unwatchError.message });
-            }
+            logger.error(MODULE_NAME, 'Error watching log file. Re-watching in 10s...', { error: error.message });
+            try { tail.unwatch(); } catch (e) { /* ignore */ }
             setTimeout(() => watchLogFile(logFilePath, bot, db), 10000);
         });
 
     } catch (error) {
-        logger.error(MODULE_NAME, `Failed to start tailing. Retrying in 10 seconds...`, { error: error.message });
+        logger.error(MODULE_NAME, `Failed to start tailing. Retrying in 10s...`, { error: error.message });
         setTimeout(() => watchLogFile(logFilePath, bot, db), 10000);
     }
 }
@@ -169,15 +184,21 @@ function watchLogFile(logFilePath, bot, db) {
 /**
  * Initializes the log reader module.
  */
-function startLogReader(bot, db) {
+async function startLogReader(bot, db) {
     const logFilePath = process.env.SERVER_LOG_FILE_PATH;
 
     if (!logFilePath) {
-        logger.warn(MODULE_NAME, 'SERVER_LOG_FILE_PATH is not defined in .env. Game-to-Telegram bridge is disabled.');
+        logger.warn(MODULE_NAME, 'SERVER_LOG_FILE_PATH not defined. Game-to-Telegram bridge is disabled.');
         return;
     }
+
+    // <<<< CHANGE START >>>> (Problem 7: Excessive DB Queries)
+    // Load the configuration once at the start.
+    await loadLogReaderConfig(db);
+    // <<<< CHANGE END >>>>
 
     watchLogFile(logFilePath, bot, db);
 }
 
-module.exports = { startLogReader };
+// Export the reload function so it can be called from other modules if settings change.
+module.exports = { startLogReader, loadLogReaderConfig };
