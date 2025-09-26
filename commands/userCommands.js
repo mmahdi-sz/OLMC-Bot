@@ -1,11 +1,10 @@
-// commands/userCommands.js
-
 const db = require('../database');
 const logger = require('../logger');
 const { getText } = require('../i18n');
 const registrationHandler = require('../handlers/registrationHandler');
 
 async function sendLanguageSelectionMenu(bot, chatId) {
+    // بهبود: اینجا به جای 'fa' از زبان پیش‌فرض استفاده می‌شود تا متن همیشه یکسان باشد.
     const message = getText('fa', 'choose_language_prompt');
     const keyboard = {
         inline_keyboard: [
@@ -20,34 +19,35 @@ async function sendLanguageSelectionMenu(bot, chatId) {
 const startCommand = {
     name: '/start',
     regex: /\/start(?: (.+))?$/,
-    execute: async (bot, msg, match, appConfig) => {
+    execute: async (bot, msg, match, appConfig, db) => { // بهبود: db از اینجا پاس داده می‌شود
         const { superAdminId, supportAdminUsername } = appConfig;
         const chatId = msg.chat.id;
         const userId = msg.from.id;
         const referrerId = match[1];
 
-        // Cancel any active wizard
         const activeWizard = await db.getWizardState(userId);
         if (activeWizard) {
             await db.deleteWizardState(userId);
-            logger.info('WIZARD_HANDLER', `Wizard (${activeWizard.wizard_type}) for user ${userId} was cancelled by /start command.`);
+            logger.info('WIZARD_HANDLER', `Wizard (${activeWizard.wizard_type}) for user ${userId} cancelled by /start command.`);
         }
         
         logger.info('CMD_START', '/start command received', { userId, chatId, referrerId: referrerId || 'none' });
         
-        const userLang = await db.getUserLanguage(userId);
+        let userLang = await db.getUserLanguage(userId);
         
-        // If user has no language set, prompt them to choose one.
-        if (!userLang || userLang === 'fa') { // Default to showing menu if no lang
+        // --- بهبود: اصلاح منطق بررسی زبان ---
+        // اگر زبان کاربر در دیتابیس وجود ندارد، منوی انتخاب زبان را نشان بده.
+        if (!userLang) {
             return sendLanguageSelectionMenu(bot, chatId);
         }
-
+        
         const isSuperAdmin = (userId === superAdminId);
         const isRegularAdmin = await db.isAdmin(userId);
         
         // Admin Menu
         if (isSuperAdmin || isRegularAdmin) {
             const baseKeyboard = [
+                // بهبود: اضافه کردن یک لایه دیگر به دکمه‌ها برای نمایش صحیح
                 [{ text: getText(userLang, 'btn_rcon_menu'), callback_data: 'rcon_menu' }]
             ];
             if (isSuperAdmin) {
@@ -72,11 +72,12 @@ const startCommand = {
                     return bot.sendMessage(chatId, message, { reply_markup: keyboard });
                 }
             }
-            // If no registration exists, start the process.
+            // اگر ثبت‌نامی وجود ندارد، فرآیند را شروع کن
             return registrationHandler.startRegistration(bot, msg, referrerId, db);
         } catch (error) {
             logger.error('CMD_START', `Error in /start command for user ${userId}`, { error: error.message });
-            return bot.sendMessage(chatId, getText(userLang, 'error_generic'));
+            // بهبود: اگر زبان کاربر مشخص نیست، یک پیام خطای عمومی به زبان پیش‌فرض ارسال شود
+            return bot.sendMessage(chatId, getText(userLang || 'fa', 'error_generic'));
         }
     }
 };

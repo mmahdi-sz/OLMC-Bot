@@ -6,14 +6,11 @@
  */
 function escapeMarkdownV2Internal(text) {
     if (typeof text !== 'string') return '';
-    // کاراکترهای رزرو شده در MarkdownV2
-    // [ _ * [ ] ( ) ~ ` > # + - = | { } . ! ]
-    // همچنین نیاز داریم خود \ را هم escape کنیم اگر در رشته اصلی وجود داشته باشد
     return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
 }
 
-
 const languages = {
+
     fa: {
         // General
         greeting_admin: "سلام! 👋 برای شروع یکی از گزینه‌ها را انتخاب کن.",
@@ -230,12 +227,18 @@ const languages = {
     }
 };
 
-/**
- * Retrieves a translated text string.
- */
 function getText(userLang, key, ...args) {
-    const lang = languages[userLang] ? userLang : 'fa';
-    const template = languages[lang][key] || key;
+    // --- بهبود: اضافه کردن یک مقدار پیش‌فرض مطمئن برای userLang ---
+    const lang = (userLang && languages[userLang]) ? userLang : 'fa';
+    
+    const template = languages[lang][key];
+
+    // --- بهبود: بررسی برای حالتی که کلید ترجمه اصلاً وجود ندارد ---
+    if (template === undefined) {
+        // اگر کلید پیدا نشد، خود کلید را برمی‌گرداند تا توسعه‌دهنده متوجه شود
+        // که کدام کلید در فایل ترجمه جا افتاده است.
+        return key;
+    }
 
     if (typeof template === 'function') {
         return template(...args);
