@@ -1,10 +1,8 @@
-// handlers/callbackHandler.js
-
 const rankManager = require('./rankManager.js');
-const db = require('../database.js'); // db is needed for wizards, etc.
+const db = require('../database.js');
 const logger = require('../logger.js');
 const { getText } = require('../i18n.js');
-const registrationHandler = require('./registrationHandler.js'); // Ensure it's required at the top
+const registrationHandler = require('./registrationHandler.js');
 
 const MODULE_NAME = 'CALLBACK_HANDLER';
 
@@ -12,9 +10,6 @@ const MODULE_NAME = 'CALLBACK_HANDLER';
  * Helper function to send a "permission denied" alert.
  */
 function answerPermissionDenied(bot, callbackQueryId, userLang) {
-    // You should add this key to your i18n.js file
-    // fa: { permission_denied: "شما اجازه انجام این کار را ندارید." }
-    // en: { permission_denied: "You do not have permission to do this." }
     const alertText = getText(userLang, 'permission_denied', "شما اجازه دسترسی ندارید.");
     return bot.answerCallbackQuery(callbackQueryId, { text: alertText, show_alert: true });
 }
@@ -43,7 +38,6 @@ async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
 async function showServerMenu(bot, callbackQuery, db, isSuperAdmin, userLang = 'fa') {
     const { message: { chat: { id: chatId }, message_id: messageId }, from: { id: userId } } = callbackQuery;
     try {
-        // Only super admin can manage servers, so we fetch their servers.
         const userServers = await db.getServers(isSuperAdmin ? userId : appConfig.superAdminId);
         const serverButtons = userServers.map(server => ([{ text: `🔌 ${server.name}`, callback_data: `connect_${server.name}` }]));
         
@@ -66,10 +60,7 @@ async function showServerMenu(bot, callbackQuery, db, isSuperAdmin, userLang = '
     }
 }
 
-
-// <<<< CHANGE START >>>> (Simplified parameters and structure)
 async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCron, startCommandHandler) {
-// <<<< CHANGE END >>>>
     const { data: action, message: msg, from: { id: userId } } = callbackQuery;
     const { chat: { id: chatId }, message_id: messageId } = msg;
 
@@ -85,16 +76,18 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             await db.setUserLanguage(userId, langCode);
             await bot.answerCallbackQuery(callbackQuery.id, { text: getText(langCode, 'language_changed') });
             await bot.deleteMessage(chatId, messageId);
-            // <<<< CHANGE START >>>> (Problem 10: Removed fake message object)
-            // Directly call the start command handler.
-            return startCommandHandler(bot, { ...msg, text: '/start' }, ['/start'], appConfig, db);
-            // <<<< CHANGE END >>>>
+            
+            // --- بهبود: اصلاح آبجکت پیام برای فراخوانی مجدد دستور /start ---
+            const updatedMsg = {
+                ...msg, // سایر اطلاعات پیام مانند شناسه چت را حفظ می‌کند
+                from: callbackQuery.from, // شناسه کاربر صحیح را از خودِ آبجکت callbackQuery تنظیم می‌کند
+                text: '/start'
+            };
+            return startCommandHandler(bot, updatedMsg, ['/start'], appConfig, db);
         }
 
         if (action.startsWith('rankmgr_') || action.startsWith('rank_interval_')) {
-            // <<<< CHANGE START >>>> (Problem 12: Permission Feedback)
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
-            // <<<< CHANGE END >>>>
             return rankManager.handleRankManagerCallback(bot, callbackQuery, db, setupRankListCron);
         }
 
@@ -105,9 +98,14 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         // --- Main Menu and User Actions ---
         if (action === 'start_menu') {
             await bot.answerCallbackQuery(callbackQuery.id);
-             // <<<< CHANGE START >>>> (Problem 10: Removed fake message object)
-            return startCommandHandler(bot, { ...msg, text: '/start' }, ['/start'], appConfig, db);
-            // <<<< CHANGE END >>>>
+            
+            // --- بهبود: اصلاح آبجکت پیام برای فراخوانی مجدد دستور /start ---
+            const updatedMsg = {
+                ...msg,
+                from: callbackQuery.from,
+                text: '/start'
+            };
+            return startCommandHandler(bot, updatedMsg, ['/start'], appConfig, db);
         }
         
         if (action === 'manage_account') {
@@ -137,13 +135,12 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
 
         // --- Admin-only Actions ---
 
-        // Permission check for all subsequent admin actions
         const isRegularAdmin = await db.isAdmin(userId);
         if (!isSuperAdmin && !isRegularAdmin) {
             return answerPermissionDenied(bot, callbackQuery.id, userLang);
         }
 
-        await bot.answerCallbackQuery(callbackQuery.id); // Answer query for all admin actions
+        await bot.answerCallbackQuery(callbackQuery.id);
 
         if (action === 'rcon_menu') {
             return showServerMenu(bot, callbackQuery, db, isSuperAdmin, userLang);
@@ -202,14 +199,12 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             }
         }
         
-        // RCON server management (only Super Admin)
         if (action === 'add_server') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
             await db.setWizardState(userId, 'add_server', 'awaiting_ip', {});
             return bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId });
         }
 
-        // Fallback for unknown actions
         logger.warn(MODULE_NAME, `Unknown callback action received`, { action, userId });
 
     } catch (e) {
@@ -219,5 +214,4 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
     }
 }
 
-// The export signature is simplified as only handleCallback is needed externally now.
 module.exports = { handleCallback };
