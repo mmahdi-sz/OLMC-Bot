@@ -1,8 +1,6 @@
-// commands/adminCommands.js
-
 const db = require('../database');
 const logger = require('../logger');
-const { VALID_MODULES } = require('../core/appConfig'); // Import from the final location
+// این خط که باعث خطا می‌شد حذف گردید
 const registrationHandler = require('../handlers/registrationHandler');
 
 // --- /enable command ---
@@ -24,7 +22,8 @@ const enableCommand = {
         if (!msg.is_topic_message || !msg.message_thread_id) {
             return bot.sendMessage(chatId, 'این دستور باید در یک تاپیک اجرا شود، نه در چت عمومی گروه.');
         }
-        if (!VALID_MODULES.includes(moduleName)) {
+        // بهبود: استفاده از appConfig.validModules به جای متغیر وارد شده
+        if (!appConfig.validModules.includes(moduleName)) {
             return bot.sendMessage(chatId, `⚠️ ماژول "${moduleName}" نامعتبر است.`, { message_thread_id: msg.message_thread_id });
         }
 
@@ -58,7 +57,8 @@ const disableCommand = {
         const moduleName = match[1].trim().toLowerCase();
         logger.info('ADMIN_CMD', '/disable command received', { requesterId, chatId, moduleName });
 
-        if (!VALID_MODULES.includes(moduleName)) {
+        // بهبود: استفاده از appConfig.validModules به جای متغیر وارد شده
+        if (!appConfig.validModules.includes(moduleName)) {
             return bot.sendMessage(chatId, `⚠️ ماژول "${moduleName}" نامعتبر است.`);
         }
 
