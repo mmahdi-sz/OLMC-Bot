@@ -1,8 +1,6 @@
-// handlers/rankManager.js
-
 const luckpermsDb = require('../luckpermsDb.js');
 const logger = require('../logger.js');
-const { getText } = require('../i18n.js'); // <<<< اضافه شد >>>>
+const { getText } = require('../i18n.js');
 
 const MODULE_NAME = 'RANK_MANAGER';
 
@@ -26,7 +24,6 @@ function escapeMarkdownV2(text) {
 async function startRankManager(bot, msg, db, setupRankListCron) {
     const chatId = msg.chat.id;
     const topicId = msg.message_thread_id;
-    const messageId = msg.message_id;
     const userId = msg.from?.id || msg.chat.id;
     const userLang = await db.getUserLanguage(userId) || 'fa';
     
@@ -49,26 +46,22 @@ async function startRankManager(bot, msg, db, setupRankListCron) {
 
         const keyboard = {
             inline_keyboard: [
-                [
-                    { text: getText(userLang, 'btnRankMgrAddGroup'), callback_data: 'rankmgr_add_prompt' },
-                    { text: getText(userLang, 'btnRankMgrDeleteGroup'), callback_data: 'rankmgr_delete_prompt' }
-                ],
-                [
-                    { text: getText(userLang, 'btnRankMgrSort'), callback_data: 'rankmgr_sort_prompt' },
-                    { text: getText(userLang, 'btnRankMgrAddTime'), callback_data: 'rankmgr_addtime_prompt' }
-                ],
+                [{ text: getText(userLang, 'btnRankMgrAddGroup'), callback_data: 'rankmgr_add_prompt' }, { text: getText(userLang, 'btnRankMgrDeleteGroup'), callback_data: 'rankmgr_delete_prompt' }],
+                [{ text: getText(userLang, 'btnRankMgrSort'), callback_data: 'rankmgr_sort_prompt' }, { text: getText(userLang, 'btnRankMgrAddTime'), callback_data: 'rankmgr_addtime_prompt' }],
                 [{ text: getText(userLang, 'btnRankMgrSettings'), callback_data: 'rankmgr_settings' }],
                 [{ text: getText(userLang, 'btnRankMgrExit'), callback_data: 'rankmgr_exit' }]
             ]
         };
 
-        const options = { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' };
-
-        if (messageId) {
-            await bot.editMessageText(messageText, options).catch(async (err) => {
-                if (!err.message.includes('message is not modified')) {
-                    logger.warn(MODULE_NAME, 'Failed to edit message, sending a new one.', { error: err.message });
+        const options = { chat_id: chatId, reply_markup: keyboard, parse_mode: 'MarkdownV2' };
+        
+        if (msg.message_id) {
+            await bot.editMessageText(messageText, { ...options, message_id: msg.message_id }).catch(async (err) => {
+                if (err.message.includes('message to edit not found') || err.message.includes('message can\'t be edited')) {
+                    logger.warn(MODULE_NAME, 'Failed to edit message, sending a new one.', { reason: err.message });
                     await bot.sendMessage(chatId, messageText, { ...options, message_thread_id: topicId });
+                } else if (!err.message.includes('message is not modified')) {
+                    logger.error(MODULE_NAME, 'Error editing rank manager message', { error: err.message });
                 }
             });
         } else {
@@ -90,14 +83,14 @@ async function handleRankManagerCallback(bot, callbackQuery, db, setupRankListCr
         } else if (action.startsWith('rankmgr_delete_')) {
             await handleDeleteGroup(bot, callbackQuery, db, setupRankListCron);
         } else if (action.startsWith('rankmgr_sort_')) {
-            await handleSortOrderMenu(bot, callbackQuery, db, setupRankListCron);
+            await handleSortOrderMenu(bot, callbackQuery, db);
         } else if (action.startsWith('rankmgr_addtime_')) {
-            await handleAddTimeWizard(bot, callbackQuery, db, setupRankListCron);
+            await handleAddTimeWizard(bot, callbackQuery, db);
         } else if (action.startsWith('rankmgr_settings') || action.startsWith('rank_interval_')) {
             await handleSettings(bot, callbackQuery, db, setupRankListCron);
         } else if (action === 'rankmgr_exit') {
             logger.info(MODULE_NAME, `User ${userId} exited the menu.`);
-            await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id);
+            await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id).catch(() => {});
         } else if (action === 'rankmgr_back_to_main') {
             logger.info(MODULE_NAME, `User ${userId} returned to the main menu.`);
             await db.deleteWizardState(userId);
@@ -106,7 +99,12 @@ async function handleRankManagerCallback(bot, callbackQuery, db, setupRankListCr
             await bot.answerCallbackQuery(callbackQuery.id);
         }
     } catch (error) {
-        logger.error(MODULE_NAME, 'Error handling callback', { userId, action, error: error.message, stack: error.stack });
+        if (error.message && error.message.includes('message is not modified')) {
+            logger.warn(MODULE_NAME, 'Callback resulted in no message change.', { action });
+            await bot.answerCallbackQuery(callbackQuery.id);
+        } else {
+            logger.error(MODULE_NAME, 'Error handling callback', { userId, action, error: error.message, stack: error.stack });
+        }
     }
 }
 
@@ -176,7 +174,7 @@ async function handleAddGroupWizard(bot, callbackQuery, db) {
         const wizardData = { groupName, topicId: msg.message_thread_id, lang: userLang };
         await db.setWizardState(userId, 'rank_add_group', WIZARD_STEPS.AWAITING_DISPLAY_NAME, wizardData);
         
-        await bot.deleteMessage(msg.chat.id, msg.message_id);
+        await bot.deleteMessage(msg.chat.id, msg.message_id).catch(() => {});
         await bot.sendMessage(userId, getText(userLang, 'promptGroupDisplayName', groupName), { parse_mode: 'Markdown' });
     }
 }
@@ -213,7 +211,7 @@ async function handleAddGroupWizardSteps(bot, msg, db, state, setupRankListCron)
                 await bot.sendMessage(userId, getText(userLang, 'errorAddGroupFailed'));
             } finally {
                 await db.deleteWizardState(userId);
-                const mockMsg = { chat: { id: msg.chat.id }, message_thread_id: topicId, from: { id: userId } };
+                const mockMsg = { chat: { id: userId }, message_thread_id: topicId, from: { id: userId } };
                 await startRankManager(bot, mockMsg, db, setupRankListCron);
             }
             break;
@@ -250,7 +248,7 @@ async function handleDeleteGroup(bot, callbackQuery, db, setupRankListCron) {
     }
 }
 
-async function handleSortOrderMenu(bot, callbackQuery, db, setupRankListCron) {
+async function handleSortOrderMenu(bot, callbackQuery, db) {
     const action = callbackQuery.data;
     const msg = callbackQuery.message;
     const userId = callbackQuery.from.id;
@@ -274,6 +272,7 @@ async function handleSortOrderMenu(bot, callbackQuery, db, setupRankListCron) {
     groups.forEach((group, index) => {
         const row = [];
         row.push({ text: `${index + 1}. ${group.display_name}`, callback_data: 'noop' });
+        // بهبود: دکمه‌ها فقط در صورت امکان جابجایی نمایش داده می‌شوند
         if (index > 0) row.push({ text: '🔼', callback_data: `rankmgr_sort_move_up_${group.id}` });
         if (index < groups.length - 1) row.push({ text: '🔽', callback_data: `rankmgr_sort_move_down_${group.id}` });
         keyboardRows.push(row);
@@ -287,7 +286,7 @@ async function handleSortOrderMenu(bot, callbackQuery, db, setupRankListCron) {
     });
 }
 
-async function handleAddTimeWizard(bot, callbackQuery, db, setupRankListCron) {
+async function handleAddTimeWizard(bot, callbackQuery, db) {
     const action = callbackQuery.data;
     const msg = callbackQuery.message;
     const userId = callbackQuery.from.id;
@@ -336,7 +335,7 @@ async function handleAddTimeWizard(bot, callbackQuery, db, setupRankListCron) {
         });
 
     } else if (action.startsWith('rankmgr_addtime_adjust_')) {
-        const [, unit, amountStr] = action.split('_');
+        const [, , unit, amountStr] = action.split('_');
         const amount = parseInt(amountStr, 10);
         state.data.timeToAdd[unit] += amount;
         normalizeTime(state.data.timeToAdd);
@@ -383,16 +382,8 @@ async function handleSettings(bot, callbackQuery, db, setupRankListCron) {
         const currentInterval = await db.getSetting('rank_list_interval_minutes') || 0;
         const keyboard = { inline_keyboard: [
             [{ text: getText(userLang, 'settingCurrentInterval', currentInterval), callback_data: 'noop' }],
-            [
-                { text: '-10', callback_data: 'rank_interval_sub_10' }, 
-                { text: '-1', callback_data: 'rank_interval_sub_1' }, 
-                { text: '+1', callback_data: 'rank_interval_add_1' }, 
-                { text: '+10', callback_data: 'rank_interval_add_10' }
-            ],
-            [
-                { text: '-60 (1h)', callback_data: 'rank_interval_sub_60' },
-                { text: '+60 (1h)', callback_data: 'rank_interval_add_60' }
-            ],
+            [{ text: '-10', callback_data: 'rank_interval_sub_10' }, { text: '-1', callback_data: 'rank_interval_sub_1' }, { text: '+1', callback_data: 'rank_interval_add_1' }, { text: '+10', callback_data: 'rank_interval_add_10' }],
+            [{ text: '-60 (1h)', callback_data: 'rank_interval_sub_60' }, { text: '+60 (1h)', callback_data: 'rank_interval_add_60' }],
             [{ text: getText(userLang, 'btnSaveChangesAndBack'), callback_data: 'rank_interval_save' }],
             [{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]
         ]};
@@ -457,22 +448,10 @@ function buildTimeAdjustmentKeyboard(time, userLang) {
     const { d, h, m } = time;
     return { inline_keyboard: [
         [{ text: getText(userLang, 'timeAdjustmentDisplay', d, h, m), callback_data: 'noop' }],
-        [
-            { text: getText(userLang, 'btnSub5Min'), callback_data: 'rankmgr_addtime_adjust_m_-5' },
-            { text: getText(userLang, 'btnAdd5Min'), callback_data: 'rankmgr_addtime_adjust_m_5' }
-        ],
-        [
-            { text: getText(userLang, 'btnSub1Hour'), callback_data: 'rankmgr_addtime_adjust_h_-1' },
-            { text: getText(userLang, 'btnAdd1Hour'), callback_data: 'rankmgr_addtime_adjust_h_1' }
-        ],
-        [
-            { text: getText(userLang, 'btnSub1Day'), callback_data: 'rankmgr_addtime_adjust_d_-1' },
-            { text: getText(userLang, 'btnAdd1Day'), callback_data: 'rankmgr_addtime_adjust_d_1' }
-        ],
-        [
-            { text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_addtime_prompt' },
-            { text: getText(userLang, 'btnConfirm'), callback_data: 'rankmgr_addtime_execute' }
-        ]
+        [{ text: getText(userLang, 'btnSub5Min'), callback_data: 'rankmgr_addtime_adjust_m_-5' }, { text: getText(userLang, 'btnAdd5Min'), callback_data: 'rankmgr_addtime_adjust_m_5' }],
+        [{ text: getText(userLang, 'btnSub1Hour'), callback_data: 'rankmgr_addtime_adjust_h_-1' }, { text: getText(userLang, 'btnAdd1Hour'), callback_data: 'rankmgr_addtime_adjust_h_1' }],
+        [{ text: getText(userLang, 'btnSub1Day'), callback_data: 'rankmgr_addtime_adjust_d_-1' }, { text: getText(userLang, 'btnAdd1Day'), callback_data: 'rankmgr_addtime_adjust_d_1' }],
+        [{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_addtime_prompt' }, { text: getText(userLang, 'btnConfirm'), callback_data: 'rankmgr_addtime_execute' }]
     ]};
 }
 
