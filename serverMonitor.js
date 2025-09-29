@@ -6,41 +6,34 @@ const logger = require('./logger.js');
 
 const MODULE_NAME = 'MONITOR';
 
-// <<<< CHANGE START >>>>
-// The playerListMessageId is no longer stored in memory.
-// It will be fetched from the database on each run.
-// State related to the content of the last sent message is still useful to prevent unnecessary edits.
 let lastSentState = {
     isOnline: null,
     playerList: '',
 };
 
-// Key for storing the message ID in the settings table
 const PLAYER_LIST_MESSAGE_ID_KEY = 'player_list_message_id';
-// <<<< CHANGE END >>>>
-
-// This was moved from an in-memory variable to a constant.
 const FORCE_UPDATE_INTERVAL_MINUTES = 15;
-
 
 /**
  * Escapes special characters for Telegram's MarkdownV2 parse mode.
  */
 function escapeMarkdownV2(text) {
     if (typeof text !== 'string') return '';
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+    // This regex now correctly escapes all required characters for MarkdownV2
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
 
 /**
  * Parses the raw response from the RCON 'list' command.
  */
 function parsePlayerList(rawResponse) {
-    const customFormatMatch = rawResponse.match(/[^\d]*(\d+)\/(\d+)[^\:]*:\s*(.*)/i);
+    // Regex improved to handle more variations and whitespace
+    const customFormatMatch = rawResponse.match(/[^\d]*(\d+)\s*\/\s*(\d+)[^:]*:\s*(.*)/i);
     if (customFormatMatch) {
         const online = parseInt(customFormatMatch[1], 10);
         const max = parseInt(customFormatMatch[2], 10);
         const playerString = customFormatMatch[3].trim();
-        const players = playerString ? playerString.split(',').map(p => p.trim()).sort() : [];
+        const players = playerString ? playerString.split(/,\s*/).map(p => p.trim()).sort() : [];
         return { online, max, players };
     }
 
@@ -49,7 +42,7 @@ function parsePlayerList(rawResponse) {
         const online = parseInt(vanillaFormatMatch[1], 10);
         const max = parseInt(vanillaFormatMatch[2], 10);
         const playerString = vanillaFormatMatch[3].trim();
-        const players = playerString ? playerString.split(',').map(p => p.trim()).sort() : [];
+        const players = playerString ? playerString.split(/,\s*/).map(p => p.trim()).sort() : [];
         return { online, max, players };
     }
     
@@ -58,22 +51,20 @@ function parsePlayerList(rawResponse) {
 
 /**
  * Fetches the player list and updates the message.
+ * This function is now exported to be callable from outside.
  */
 async function updatePlayerList(bot, db, rconClient, forceSend = false) {
     const mainGroupId = await db.getSetting('main_group_id');
     const playersTopicId = await db.getSetting('topic_id_players');
 
     if (!mainGroupId || !playersTopicId) {
-        if (forceSend) logger.warn(MODULE_NAME, 'Player list module is not configured.');
+        if (forceSend) logger.warn(MODULE_NAME, 'ماژول لیست بازیکنان پیکربندی نشده است.');
         return;
     }
 
-    // <<<< CHANGE START >>>>
-    // Fetch the message ID from the database at the beginning of the function.
     let playerListMessageId = await db.getSetting(PLAYER_LIST_MESSAGE_ID_KEY);
     const lastUpdateTime = parseInt(await db.getSetting('player_list_last_update_ts') || '0', 10);
-    // <<<< CHANGE END >>>>
-
+    
     const tehranTime = () => moment().tz('Asia/Tehran').format('HH:mm:ss');
     const isOnline = rconClient !== null;
 
@@ -81,12 +72,11 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
     if (!isOnline) {
         if (lastSentState.isOnline === false && !forceSend) return; // No change in state
         
-        const message = `🔌 *Server Status*\n\n- RCON connection is currently down\\.\n- Last check: ${tehranTime()}`;
+        const message = `🔌 *وضعیت سرور*\n\n- اتصال به RCON در حال حاضر قطع است.\n- آخرین بررسی: ${tehranTime()}`;
         try {
             if (playerListMessageId && !forceSend) {
                 await bot.editMessageText(message, { chat_id: mainGroupId, message_id: playerListMessageId, parse_mode: 'MarkdownV2' });
             } else {
-                // Delete the old message ID from DB if it exists, as we are creating a new one.
                 if (playerListMessageId) await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
                 
                 const sentMessage = await bot.sendMessage(mainGroupId, message, { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' });
@@ -98,10 +88,10 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
             lastSentState = { isOnline: false, playerList: '' };
         } catch (error) {
             if (error.response?.body?.description.includes('message to edit not found')) {
-                logger.warn(MODULE_NAME, 'Offline message to edit not found. Clearing DB entry.');
+                logger.warn(MODULE_NAME, 'پیام آفلاین برای ویرایش یافت نشد. ورودی پایگاه داده پاک می‌شود.');
                 await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
             } else if (!error.message.includes('message is not modified')) {
-                logger.error(MODULE_NAME, 'Failed to send/edit offline message', { error: error.message });
+                logger.error(MODULE_NAME, 'ارسال/ویرایش پیام آفلاین ناموفق بود.', { error: error.message });
             }
         }
         return;
@@ -114,8 +104,8 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
         const parsedData = parsePlayerList(cleanedResponse);
 
         if (!parsedData) {
-            logger.error(MODULE_NAME, 'Failed to parse RCON response for player list.');
-            if (forceSend) await bot.sendMessage(mainGroupId, '❌ Could not parse RCON response.', { message_thread_id: playersTopicId });
+            logger.error(MODULE_NAME, 'تجزیه پاسخ RCON برای لیست بازیکنان ناموفق بود.');
+            if (forceSend) await bot.sendMessage(mainGroupId, '❌ پاسخ RCON قابل تجزیه نیست.', { message_thread_id: playersTopicId });
             return;
         }
 
@@ -127,40 +117,39 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
         const isUpdateTimeExpired = minutesSinceLastUpdate >= FORCE_UPDATE_INTERVAL_MINUTES;
 
         if (isPlayerListUnchanged && !isUpdateTimeExpired && !forceSend) {
-            logger.debug(MODULE_NAME, 'Skipping update: Player list unchanged and interval not expired.', { minutesSinceLastUpdate });
-            return;
+            return; // Skip update
         }
         if (isPlayerListUnchanged && isUpdateTimeExpired) {
-            logger.info(MODULE_NAME, 'Forcing time update because interval has expired.');
+            logger.info(MODULE_NAME, 'بازه زمانی منقضی شده، آپدیت زمان اجباری است.');
         }
 
-        let message = '👥 *Online Players*\n\n';
-        message += `\\- Online: *${parsedData.online} / ${parsedData.max}*\n\n`;
+        let message = '👥 *بازیکنان آنلاین*\n\n';
+        message += `\\- آنلاین: *${parsedData.online} / ${parsedData.max}*\n\n`;
         if (currentPlayers.length > 0) {
             message += currentPlayers.map(p => `\\- ${escapeMarkdownV2(p)}`).join('\n');
         } else {
-            message += '\\- No players are currently online\\.';
+            message += '\\- در حال حاضر هیچ بازیکنی آنلاین نیست.';
         }
-        message += `\n\n🕒 Last Updated \\(Tehran\\): *${tehranTime()}*`;
+        message += `\n\n🕒 آخرین آپدیت (تهران): *${tehranTime()}*`;
 
         const options = { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' };
 
         if (forceSend) {
             await bot.sendMessage(mainGroupId, message, options);
-            return; // Don't interact with the main message ID on a forced send
+            return;
         }
 
         if (playerListMessageId) {
             try {
                 await bot.editMessageText(message, { chat_id: mainGroupId, message_id: playerListMessageId, ...options });
-                await db.setSetting('player_list_last_update_ts', Date.now()); // Update timestamp on successful edit
+                await db.setSetting('player_list_last_update_ts', Date.now());
             } catch (error) {
                 if (error.response?.body?.description.includes('message to edit not found')) {
-                    logger.warn(MODULE_NAME, 'Message to edit not found. It will be recreated on the next run.');
-                    await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY); // Invalidate the stored ID
+                    logger.warn(MODULE_NAME, 'پیام برای ویرایش یافت نشد. در اجرای بعدی دوباره ایجاد خواهد شد.');
+                    await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY); 
                     playerListMessageId = null; // Ensure a new message is created below
                 } else if (!error.message.includes('message is not modified')) {
-                    logger.error(MODULE_NAME, 'Failed to edit player list message', { error: error.message });
+                    logger.error(MODULE_NAME, 'ویرایش پیام لیست بازیکنان ناموفق بود.', { error: error.message });
                 }
             }
         }
@@ -169,65 +158,68 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
             const sentMessage = await bot.sendMessage(mainGroupId, message, options);
             await db.setSetting(PLAYER_LIST_MESSAGE_ID_KEY, sentMessage.message_id);
             await db.setSetting('player_list_last_update_ts', Date.now());
-            logger.success(MODULE_NAME, 'New player list message sent and its ID saved to DB.', { messageId: sentMessage.message_id });
+            logger.success(MODULE_NAME, 'پیام جدید لیست بازیکنان ارسال و شناسه آن در پایگاه داده ذخیره شد.', { messageId: sentMessage.message_id });
         }
 
         lastSentState = { isOnline: true, playerList: currentPlayerListString };
 
     } catch (error) {
-        logger.error(MODULE_NAME, 'Error getting player list via RCON', { error: error.message });
-        if (forceSend) await bot.sendMessage(mainGroupId, '❌ Error fetching player list.', { message_thread_id: playersTopicId });
+        logger.error(MODULE_NAME, 'خطا در دریافت لیست بازیکنان از طریق RCON', { error: error.message });
+        if (forceSend) await bot.sendMessage(mainGroupId, '❌ خطا در واکشی لیست بازیکنان.', { message_thread_id: playersTopicId });
     }
 }
 
 /**
  * Initializes the server monitoring tasks.
+ * This function now has a callback parameter to react to RCON state changes instantly.
  */
-function startServerMonitor(bot, db, getRconClient) {
-    logger.info(MODULE_NAME, 'Server monitor has started. Will check every 5 minutes.');
+function startServerMonitor(bot, db, getRconClient, onRconStateChange) {
+    logger.info(MODULE_NAME, 'مانیتور سرور شروع به کار کرد. هر 5 دقیقه وضعیت بررسی می‌شود.');
 
-    // Run once at startup to ensure the message is created/updated immediately.
+    // Run once at startup
     setTimeout(() => {
-        logger.info(MODULE_NAME, 'Performing initial player list update on startup...');
-        const rconClient = getRconClient();
-        updatePlayerList(bot, db, rconClient, false);
-    }, 2000); // Small delay to allow DB/RCON connections to establish.
+        logger.info(MODULE_NAME, 'اجرای آپدیت اولیه لیست بازیکنان در زمان شروع...');
+        updatePlayerList(bot, db, getRconClient(), false);
+    }, 2000); 
 
+    // <<<< بخش بهبود یافته >>>>
+    // به محض تغییر وضعیت RCON، لیست بازیکنان را فورا آپدیت کن
+    if (onRconStateChange) {
+        onRconStateChange((rconClient) => {
+            logger.info(MODULE_NAME, 'تغییر وضعیت RCON شناسایی شد. آپدیت فوری لیست بازیکنان...');
+            updatePlayerList(bot, db, rconClient, false);
+        });
+    }
+    
+    // Continue periodic checks as a fallback
     cron.schedule('*/5 * * * *', () => {
-        const rconClient = getRconClient();
-        updatePlayerList(bot, db, rconClient, false);
+        updatePlayerList(bot, db, getRconClient(), false);
     });
 
+    // Daily reset
     cron.schedule('0 0 * * *', async () => {
-        logger.info(MODULE_NAME, 'Daily reset: Clearing player list message ID from DB.');
-        // <<<< CHANGE START >>>>
-        // Instead of nulling a variable, we delete the setting from the database.
+        logger.info(MODULE_NAME, 'ریست روزانه: پاک کردن شناسه پیام لیست بازیکنان از پایگاه داده.');
         await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
         await db.deleteSetting('player_list_last_update_ts');
-        // <<<< CHANGE END >>>>
     }, {
         timezone: "Asia/Tehran"
     });
 
     return {
-        // This function is for one-off sends and doesn't affect the main message.
         sendPlayerList: () => {
-            logger.info(MODULE_NAME, 'Manual one-time player list request received.');
-            const rconClient = getRconClient();
-            return updatePlayerList(bot, db, rconClient, true);
+            logger.info(MODULE_NAME, 'درخواست دستی برای ارسال یکباره لیست بازیکنان دریافت شد.');
+            return updatePlayerList(bot, db, getRconClient(), true);
         },
-        // This function forces the bot to forget the old message and create a new one.
         forceNewPlayerListMessage: async () => {
-            logger.info(MODULE_NAME, 'Forcing a new player list message to be the main target.');
-            // <<<< CHANGE START >>>>
-            // We delete the setting from the database to trigger a new message creation.
-            await db.deleteSetting(PLAYER_LAST_MESSAGE_ID_KEY);
+            logger.info(MODULE_NAME, 'ایجاد یک پیام جدید برای لیست بازیکنان به صورت اجباری.');
+            // Corrected a typo from PLAYER_LAST_MESSAGE_ID_KEY
+            await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
             await db.deleteSetting('player_list_last_update_ts');
-            // <<<< CHANGE END >>>>
-            const rconClient = getRconClient();
-            return updatePlayerList(bot, db, rconClient, false);
+            return updatePlayerList(bot, db, getRconClient(), false);
         }
     };
 }
 
-module.exports = { startServerMonitor };
+// <<<< بخش بهبود یافته >>>>
+// ما updatePlayerList را export می‌کنیم تا bot.js بتواند از آن استفاده کند
+module.exports = { startServerMonitor, updatePlayerList };

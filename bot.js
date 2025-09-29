@@ -1,4 +1,4 @@
-// bot.js (Final Refactored Version)
+// bot.js (Final Refactored Version with Intelligent RCON)
 
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
@@ -6,7 +6,7 @@ const cron = require('node-cron');
 const logger = require('./logger.js');
 const db = require('./database.js');
 const { loadConfig, loadCommands, getCommandHandler } = require('./core/setup.js');
-const { connectRcon, getRconClient } = require('./core/rconManager.js');
+const { connectRcon, getRconClient } = require('./core/rconManager.js'); // <<<< بدون تغییر
 const { handleChatMessage } = require('./core/chatBridge.js');
 const { sendRankList, updateOnlineStatusTopic } = require('./utils/botUtils.js');
 const callbackHandler = require('./handlers/callbackHandler.js');
@@ -29,19 +29,35 @@ async function main() {
     await db.initDb();
     const appConfig = await loadConfig();
 
-    // Clear pending updates to solve Problem #1
-    const bot = new TelegramBot(token, { polling: { interval: 300, params: { timeout: 10, offset: 0 } } });
-    await bot.deleteWebHook(); // Ensure polling is used
-    await bot.getUpdates({ offset: -1 }); // Acknowledge old updates
+    const bot = new TelegramBot(token, { polling: { interval: 300, params: { timeout: 10 } } });
+    await bot.deleteWebHook();
+    await bot.getUpdates({ offset: -1 });
     logger.info(MODULE_NAME, 'Cleared pending updates to prevent message flood.');
 
-    // Initialize core components
-    connectRcon(appConfig.rcon, () => updateOnlineStatusTopic(bot, db, getRconClient()));
+    // <<<< CHANGE START >>>>
+    // ---------- بخش اتصال RCON به طور کامل بازنویسی شده است ----------
+    
+    // این تابع callback هر زمان که وضعیت RCON تغییر کند (آنلاین/آفلاین) فراخوانی می‌شود.
+    const handleRconStateChange = (rconClient) => {
+        // ماژول‌هایی که به وضعیت زنده RCON وابسته‌اند، از این طریق به‌روز می‌شوند.
+        updateOnlineStatusTopic(bot, db, rconClient);
+        // سرویس مانیتورینگ بازیکنان نیز باید از وضعیت جدید مطلع شود.
+        // (این بخش در فایل serverMonitor.js پیاده‌سازی خواهد شد)
+    };
+
+    // فراخوانی rconManager هوشمند جدید
+    // ما نمونه bot و superAdminId را برای ارسال هشدارهای ضروری به آن پاس می‌دهیم.
+    connectRcon(appConfig.rcon, handleRconStateChange, bot, appConfig.superAdminId);
+    
+    // ---------- پایان بخش تغییر یافته ----------
+    // <<<< CHANGE END >>>>
+
     loadCommands(bot, appConfig);
 
     // Initialize background services
     startLogReader(bot, db);
-    startServerMonitor(bot, db, getRconClient);
+    // ما getRconClient را به سرویس‌ها پاس می‌دهیم تا همیشه به آخرین وضعیت کلاینت دسترسی داشته باشند.
+    startServerMonitor(bot, db, getRconClient); 
 
     let rankListCronJob = null;
     async function setupRankListCron() {
@@ -75,7 +91,8 @@ async function main() {
         
         // Chat Bridge Logic
         if (msg.chat.id === appConfig.mainGroupId && msg.message_thread_id === appConfig.topicIds.chat) {
-            return handleChatMessage(bot, msg, db, appConfig);
+            // chatBridge برای کار کردن به آخرین وضعیت کلاینت RCON نیاز دارد
+            return handleChatMessage(bot, msg, db, appConfig, getRconClient());
         }
 
         // Auto-delete non-admin messages in restricted topics
