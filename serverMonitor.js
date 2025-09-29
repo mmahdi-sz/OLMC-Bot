@@ -72,15 +72,19 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
     if (!isOnline) {
         if (lastSentState.isOnline === false && !forceSend) return; // No change in state
         
-        const message = `🔌 *وضعیت سرور*\n\n- اتصال به RCON در حال حاضر قطع است.\n- آخرین بررسی: ${tehranTime()}`;
+        // <<<< بخش بهبود یافته >>>>
+        const time = tehranTime();
+        const message = `🔌 *وضعیت سرور*\n\n\\- اتصال به RCON در حال حاضر قطع است\\.\n\\- آخرین بررسی: ${time}`;
+        // <<<< پایان بخش بهبود یافته >>>>
         try {
             if (playerListMessageId && !forceSend) {
                 await bot.editMessageText(message, { chat_id: mainGroupId, message_id: playerListMessageId, parse_mode: 'MarkdownV2' });
             } else {
-                if (playerListMessageId) await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
-                
+                if (playerListMessageId) {
+                    await bot.deleteMessage(mainGroupId, playerListMessageId).catch(() => {});
+                    await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
+                }
                 const sentMessage = await bot.sendMessage(mainGroupId, message, { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' });
-                
                 if (!forceSend) {
                     await db.setSetting(PLAYER_LIST_MESSAGE_ID_KEY, sentMessage.message_id);
                 }
@@ -111,13 +115,14 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
 
         const { players: currentPlayers } = parsedData;
         const currentPlayerListString = currentPlayers.join(', ');
-
+        
         const isPlayerListUnchanged = lastSentState.isOnline === true && lastSentState.playerList === currentPlayerListString;
         const minutesSinceLastUpdate = (Date.now() - lastUpdateTime) / (1000 * 60);
         const isUpdateTimeExpired = minutesSinceLastUpdate >= FORCE_UPDATE_INTERVAL_MINUTES;
 
         if (isPlayerListUnchanged && !isUpdateTimeExpired && !forceSend) {
-            return; // Skip update
+            logger.debug(MODULE_NAME, 'Skipping update: Player list unchanged and interval not expired.', { minutesSinceLastUpdate });
+            return;
         }
         if (isPlayerListUnchanged && isUpdateTimeExpired) {
             logger.info(MODULE_NAME, 'بازه زمانی منقضی شده، آپدیت زمان اجباری است.');
@@ -130,7 +135,11 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
         } else {
             message += '\\- در حال حاضر هیچ بازیکنی آنلاین نیست.';
         }
-        message += `\n\n🕒 آخرین آپدیت (تهران): *${tehranTime()}*`;
+        
+        // <<<< بخش بهبود یافته (حل مشکل اصلی) >>>>
+        const time = tehranTime();
+        message += `\n\n🕒 آخرین آپدیت \\(تهران\\): *${time}*`;
+        // <<<< پایان بخش بهبود یافته >>>>
 
         const options = { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' };
 
@@ -171,9 +180,8 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
 
 /**
  * Initializes the server monitoring tasks.
- * This function now has a callback parameter to react to RCON state changes instantly.
  */
-function startServerMonitor(bot, db, getRconClient, onRconStateChange) {
+function startServerMonitor(bot, db, getRconClient) {
     logger.info(MODULE_NAME, 'مانیتور سرور شروع به کار کرد. هر 5 دقیقه وضعیت بررسی می‌شود.');
 
     // Run once at startup
@@ -182,14 +190,7 @@ function startServerMonitor(bot, db, getRconClient, onRconStateChange) {
         updatePlayerList(bot, db, getRconClient(), false);
     }, 2000); 
 
-    // <<<< بخش بهبود یافته >>>>
-    // به محض تغییر وضعیت RCON، لیست بازیکنان را فورا آپدیت کن
-    if (onRconStateChange) {
-        onRconStateChange((rconClient) => {
-            logger.info(MODULE_NAME, 'تغییر وضعیت RCON شناسایی شد. آپدیت فوری لیست بازیکنان...');
-            updatePlayerList(bot, db, rconClient, false);
-        });
-    }
+    // <<<< تغییر یافته: منطق onRconStateChange به bot.js منتقل شده، اینجا فقط تابع اصلی را اجرا می‌کنیم >>>>
     
     // Continue periodic checks as a fallback
     cron.schedule('*/5 * * * *', () => {
@@ -205,21 +206,20 @@ function startServerMonitor(bot, db, getRconClient, onRconStateChange) {
         timezone: "Asia/Tehran"
     });
 
-    return {
-        sendPlayerList: () => {
-            logger.info(MODULE_NAME, 'درخواست دستی برای ارسال یکباره لیست بازیکنان دریافت شد.');
-            return updatePlayerList(bot, db, getRconClient(), true);
-        },
-        forceNewPlayerListMessage: async () => {
-            logger.info(MODULE_NAME, 'ایجاد یک پیام جدید برای لیست بازیکنان به صورت اجباری.');
-            // Corrected a typo from PLAYER_LAST_MESSAGE_ID_KEY
-            await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
-            await db.deleteSetting('player_list_last_update_ts');
-            return updatePlayerList(bot, db, getRconClient(), false);
-        }
-    };
+    // <<<< بخش بهبود یافته: توابع force به صورت مستقیم export می شوند >>>>
 }
 
-// <<<< بخش بهبود یافته >>>>
-// ما updatePlayerList را export می‌کنیم تا bot.js بتواند از آن استفاده کند
-module.exports = { startServerMonitor, updatePlayerList };
+async function forceNewPlayerListMessage(bot, db, getRconClient) {
+    logger.info(MODULE_NAME, 'ایجاد یک پیام جدید برای لیست بازیکنان به صورت اجباری.');
+    const mainGroupId = await db.getSetting('main_group_id');
+    const playerListMessageId = await db.getSetting(PLAYER_LIST_MESSAGE_ID_KEY);
+    if(mainGroupId && playerListMessageId) {
+       await bot.deleteMessage(mainGroupId, playerListMessageId).catch(() => {});
+    }
+    await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
+    await db.deleteSetting('player_list_last_update_ts');
+    return updatePlayerList(bot, db, getRconClient(), false);
+}
+
+
+module.exports = { startServerMonitor, updatePlayerList, forceNewPlayerListMessage };
