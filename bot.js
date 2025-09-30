@@ -85,8 +85,12 @@ async function main() {
     bot.on('message', async (msg) => {
         if (msg.text && msg.text.startsWith('/')) return; // Commands are handled by onText
 
+        // <<<< CHANGE START >>>>
+        // آبجکت appConfig به عنوان پارامتر چهارم به تابع handleRegistrationWizard پاس داده شد.
+        // این تغییر برای دسترسی به نام کاربری یوزربات جهت ساخت لینک نهایی‌سازی ضروری است.
         const isWizardHandled = await wizardHandler.handleWizardSteps(bot, msg, db, appConfig.superAdminId) ||
-                                  await registrationHandler.handleRegistrationWizard(bot, msg, db);
+                                  await registrationHandler.handleRegistrationWizard(bot, msg, db, appConfig);
+        // <<<< CHANGE END >>>>
         if (isWizardHandled) return;
         
         // Chat Bridge Logic

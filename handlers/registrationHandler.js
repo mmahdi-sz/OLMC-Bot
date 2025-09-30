@@ -13,10 +13,10 @@ const WIZARD_STEPS = {
 };
 
 const MINECRAFT_USERNAME_REGEX = /^[a-zA-Z0-9_]{3,16}$/;
-const SUPPORT_ADMIN_USERNAME = process.env.SUPPORT_ADMIN_USERNAME || 'otherland_admin';
-
-// تابع escapeMarkdownV2 در فایل‌های دیگر مانند i18n.js وجود دارد و نیازی به تعریف مجدد آن در اینجا نیست.
-// در صورت نیاز می‌توان آن را از یک فایل utils مرکزی import کرد.
+// <<<< CHANGE START >>>>
+// متغیر ثابت حذف شد. این مقدار از appConfig خوانده خواهد شد.
+// const SUPPORT_ADMIN_USERNAME = process.env.SUPPORT_ADMIN_USERNAME || 'otherland_admin';
+// <<<< CHANGE END >>>>
 
 /**
  * نقطه شروع برای فرآیند ثبت‌نام کاربر.
@@ -103,7 +103,10 @@ async function handleRegistrationCallback(bot, callbackQuery, db) {
 /**
  * مدیریت پیام‌های متنی کاربر در طول ویزارد ثبت‌نام.
  */
-async function handleRegistrationWizard(bot, msg, db) {
+// <<<< CHANGE START >>>>
+// پارامتر appConfig برای دسترسی به تنظیمات سراسری اضافه شد
+async function handleRegistrationWizard(bot, msg, db, appConfig) { 
+// <<<< CHANGE END >>>>
     const userId = msg.from.id;
     const chatId = msg.chat.id;
     const text = msg.text || '';
@@ -127,9 +130,10 @@ async function handleRegistrationWizard(bot, msg, db) {
             const isTaken = await db.isUsernameTaken(username);
             if (isTaken) {
                 logger.warn(MODULE_NAME, `User ${userId} tried to register with a taken username`, { username });
-                // Note: escapeMarkdownV2 should be available globally or from a utils file
-                // For now, assuming it's handled by i18n or bot.js helpers
-                await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', SUPPORT_ADMIN_USERNAME));
+                // <<<< CHANGE START >>>>
+                // استفاده از appConfig برای دریافت نام کاربری ادمین
+                await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
+                // <<<< CHANGE END >>>>
                 return true;
             }
 
@@ -170,28 +174,55 @@ async function handleRegistrationWizard(bot, msg, db) {
                     game_username: finalUsername,
                     age: state.data.age,
                     uuid: uuid,
-                    referrer_telegram_id: state.data.referrerId || null,
-                    language_code: userLang
+                    referrer_telegram_id: state.data.referrerId || null
                 };
+                
+                // زبان کاربر دیگر در این جدول ذخیره نمی‌شود و به جدول user_settings منتقل شده است
+                // language_code: userLang
 
                 await db.addRegistration(registrationData);
                 logger.success(MODULE_NAME, `User ${userId} successfully registered`, { data: registrationData });
 
-                // Note: The getText function for 'registrationSuccess' should handle MarkdownV2 escaping
-                const finalMessage = getText(userLang, 'registrationSuccess', SUPPORT_ADMIN_USERNAME);
+                // <<<< CHANGE START >>>>
+                // --- منطق جدید برای ارسال دکمه شیشه‌ای ---
+
+                // 1. ساخت لینک هوشمند با استفاده از نام کاربری یوزربات از appConfig
+                const finalizationUrl = `https://t.me/${appConfig.supportBotUsername}?text=${uuid}`;
+
+                // 2. ساخت دکمه شیشه‌ای با متنی که از i18n خوانده می‌شود
+                const keyboard = {
+                    inline_keyboard: [
+                        [
+                            { 
+                                text: getText(userLang, 'btnFinalizeRegistration'), 
+                                url: finalizationUrl 
+                            }
+                        ]
+                    ]
+                };
+
+                // 3. دریافت پیام راهنمای جدید از i18n
+                const finalMessage = getText(userLang, 'registrationSuccess');
                 
-                await bot.sendMessage(chatId, finalMessage, { parse_mode: 'MarkdownV2' });
-                await bot.sendMessage(chatId, `\`${uuid}\``, { parse_mode: 'Markdown' });
+                // 4. ارسال پیام نهایی به همراه دکمه
+                await bot.sendMessage(chatId, finalMessage, { 
+                    reply_markup: keyboard,
+                    parse_mode: 'Markdown' // یا MarkdownV2 بسته به نیاز متن
+                });
+
+                // --- کد قدیمی حذف شد ---
+                // const finalMessage = getText(userLang, 'registrationSuccess', appConfig.supportAdminUsername);
+                // await bot.sendMessage(chatId, finalMessage, { parse_mode: 'MarkdownV2' });
+                // await bot.sendMessage(chatId, `\`${uuid}\``, { parse_mode: 'Markdown' });
+
+                // <<<< CHANGE END >>>>
 
             } catch (error) {
-                // <<<< CHANGE START >>>>
-                // لاگ دقیق خطا به اینجا اضافه شد تا بتوانیم مشکل اصلی را در کنسول ببینیم.
                 logger.error(MODULE_NAME, `DATABASE ERROR during registration for user ${userId}`, { 
                     errorMessage: error.message, 
-                    errorCode: error.code, // کد خطای دیتابیس (مثلاً ER_DUP_ENTRY)
+                    errorCode: error.code,
                     stack: error.stack 
                 });
-                // <<<< CHANGE END >>>>
                 await bot.sendMessage(chatId, getText(userLang, 'errorRegistrationFailed'));
             } finally {
                 await db.deleteWizardState(userId);
@@ -220,7 +251,7 @@ async function handleDeleteRegistration(bot, msg, db, superAdminId) {
 
     try {
         const result = await db.deleteRegistration(uuid);
-        if (result > 0) { // Changed from result.affectedRows
+        if (result > 0) {
             logger.success(MODULE_NAME, `Registration with UUID ${uuid} deleted successfully.`);
             await bot.sendMessage(requesterId, getText(userLang, 'delSuccess', uuid), { parse_mode: 'Markdown' });
         } else {

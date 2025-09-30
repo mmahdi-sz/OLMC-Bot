@@ -15,12 +15,14 @@ const languages = {
         // --- General ---
         greeting_admin: "سلام\\! 👋 برای شروع یکی از گزینه‌ها را انتخاب کن\\.",
         greeting_user_approved: "🎉 به پنل کاربری خود خوش آمدید\\!\n\nاز طریق دکمه زیر می‌توانید اکانت خود را مدیریت کرده و لینک زیرمجموعه‌گیری خود را دریافت کنید\\.",
-        greeting_user_pending: (admin, uuid) => {
-            const escapedAdmin = escapeMarkdownV2Internal(admin);
-            return `⏳ ثبت‌نام اولیه شما انجام شده ولی هنوز نهایی نشده است\\.\nلطفاً کد زیر را کپی کرده و برای ادمین پشتیبانی ارسال کنید:\n👤 *ادمین:* @${escapedAdmin}\nکد شما:\n\`${uuid}\``;
-        },
         error_generic: "❌ خطایی در بررسی وضعیت شما رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
         errorMenu: "خطایی در نمایش منو رخ داد\\. لطفاً دوباره تلاش کنید\\.",
+
+        // <<<< CHANGE START >>>>
+        // --- General Errors & System Messages ---
+        permission_denied: "⛔️ شما اجازه دسترسی به این بخش را ندارید.",
+        errorServerNotFound: "⚠️ سرور مورد نظر یافت نشد.",
+        // <<<< CHANGE END >>>>
         
         // --- Language Selection ---
         choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
@@ -57,6 +59,15 @@ const languages = {
         btnAddServer: "➕ افزودن سرور",
         btnRemoveServer: "➖ حذف سرور",
         promptAddServerIP: "لطفاً آدرس IP یا دامنه سرور را وارد کنید:",
+        // <<<< CHANGE START >>>>
+        rconConnecting: (serverName) => `⏳ در حال اتصال به سرور *${escapeMarkdownV2Internal(serverName)}*...`,
+        rconSuccess: (serverName) => `✅ با موفقیت به سرور *${escapeMarkdownV2Internal(serverName)}* متصل شدید\\.\n\nاکنون می‌توانید دستورات RCON را ارسال کنید\\.\nبرای خروج و قطع اتصال، از دستور \`/disconnect\` استفاده کنید\\.`,
+        rconFailed: (serverName, error) => `❌ اتصال به سرور *${escapeMarkdownV2Internal(serverName)}* ناموفق بود\\.\n*دلیل:* \`${error}\``,
+        errorNoServersToDelete: "هیچ سروری برای حذف کردن وجود ندارد.",
+        promptDeleteServer: "کدام سرور را می‌خواهید حذف کنید؟",
+        confirmDeleteServer: "آیا از حذف این سرور مطمئن هستید؟ این عمل قابل بازگشت نیست.",
+        deleteServerSuccess: "✅ سرور با موفقیت حذف شد.",
+        // <<<< CHANGE END >>>>
 
         // --- Account Panel ---
         accountPanelTitle: "🔧 *پنل مدیریت اکانت*\n\nاز گزینه‌های زیر برای مدیریت حساب کاربری خود استفاده کنید:",
@@ -72,12 +83,10 @@ const languages = {
         promptUsername: "✅ نسخه بازی شما ثبت شد\\.\n\nلطفاً نام کاربری دقیق خود را در بازی وارد کنید:",
         errorInvalidUsername: "⚠️ نام کاربری نامعتبر است\\.\nنام کاربری باید بین ۳ تا ۱۶ کاراکتر باشد و فقط شامل حروف انگلیسی، اعداد و خط زیر \\(\\_\\) باشد\\. لطفاً دوباره تلاش کنید\\.",
         errorUsernameTaken: (admin) => `شما مجاز به استفاده از این نام کاربری نیستید زیرا توسط فرد دیگری گرفته شده است\\.\nبه راهنمایی نیاز دارید؟؟؟ به @${admin} پیام بدید`,
-        promptAge: (username) => `✅ نام کاربری "${username}" ثبت شد\\.\n\nلطفا سن خود را وارد کنید\nمانند: \`15\``,
+        promptAge: (username) => `✅ نام کاربری "${escapeMarkdownV2Internal(username)}" ثبت شد\\.\n\nلطفا سن خود را وارد کنید\nمانند: \`15\``,
         errorInvalidAge: "⚠️ سن وارد شده معتبر نیست\\. لطفاً یک عدد بین ۱۰ تا ۷۰ وارد کنید\\.",
-        registrationSuccess: (admin) => {
-            const escapedAdmin = escapeMarkdownV2Internal(admin);
-            return `✅ ثبت‌نام اولیه شما با موفقیت انجام شد\\!\\n\\nاین کد ثبت‌نام شماست\\. لطفاً آن را کپی کرده و برای ادمین پشتیبانی \\(@${escapedAdmin}\\) ارسال کنید تا ثبت‌نام شما نهایی شود\\.`;
-        },
+        registrationSuccess: "✅ ثبت‌نام اولیه شما با موفقیت انجام شد\\!\n\nبرای فعال‌سازی نهایی اکانت خود، کافیست روی دکمه زیر کلیک کرده و پیام آماده شده را ارسال کنید\\.",
+        btnFinalizeRegistration: "✅ نهایی کردن ثبت نام (کلیک کنید)",
         errorRegistrationFailed: "❌ متاسفانه در مرحله آخر ثبت‌نام خطایی رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
 
         // --- Admin Commands ---
@@ -93,15 +102,15 @@ const languages = {
         promptServerPort: "عالی\\! حالا پورت سرور را وارد کنید:",
         promptServerPassword: "بسیار خب\\. حالا رمز \\(password\\) سرور RCON را وارد کنید:",
         promptServerName: "و در آخر، چه نامی برای این سرور ذخیره شود؟ \\(این نام باید یکتا باشد\\)",
-        testingConnection: (name) => `⏳ سرور "${name}" ذخیره شد\\. در حال تست اتصال\\.\\.\\.`,
+        testingConnection: (name) => `⏳ سرور "${escapeMarkdownV2Internal(name)}" ذخیره شد\\. در حال تست اتصال\\.\\.\\.`,
         connectionSuccess: "✅ سرور با موفقیت ذخیره و اتصال به آن تست شد\\!",
-        errorServerDuplicate: (name) => `⚠️ خطا: سروری با نام "${name}" از قبل وجود دارد\\. لطفاً دوباره تلاش کنید\\.`,
+        errorServerDuplicate: (name) => `⚠️ خطا: سروری با نام "${escapeMarkdownV2Internal(name)}" از قبل وجود دارد\\. لطفاً دوباره تلاش کنید\\.`,
         errorConnectionFailed: "❌ سرور ذخیره شد، اما اتصال به RCON ناموفق بود\\. لطفاً اطلاعات را بررسی کنید\\.",
         btnRetryConnection: "🔁 تلاش مجدد برای اتصال",
         btnEditServer: "✏️ ویرایش اطلاعات سرور",
         promptAdminName: (id) => `شناسه کاربر \\(${id}\\) دریافت شد\\. حالا یک نام برای این ادمین وارد کنید:`,
         errorInvalidAdminId: "خطا: لطفاً یک شناسه عددی معتبر وارد کنید یا یک پیام از کاربر مورد نظر فوروارد کنید\\.",
-        addAdminSuccess: (name, id) => `✅ ادمین جدید با نام "${name}" و شناسه "${id}" با موفقیت اضافه شد\\.`,
+        addAdminSuccess: (name, id) => `✅ ادمین جدید با نام "${escapeMarkdownV2Internal(name)}" و شناسه "${id}" با موفقیت اضافه شد\\.`,
         errorAdminDuplicate: "⚠️ این کاربر از قبل ادمین است\\.",
         errorAddAdminFailed: "❌ خطایی در ذخیره ادمین رخ داد\\.",
 
@@ -152,13 +161,15 @@ const languages = {
         // --- General ---
         greeting_admin: "Hello\\! 👋 Choose an option to get started\\.",
         greeting_user_approved: "🎉 Welcome to your user panel\\!\n\nYou can manage your account and get your referral link using the button below\\.",
-        greeting_user_pending: (admin, uuid) => {
-            const escapedAdmin = escapeMarkdownV2Internal(admin);
-            return `⏳ Your initial registration is complete but not yet finalized\\.\nPlease copy the code below and send it to the support admin:\n👤 *Admin:* @${escapedAdmin}\nYour code:\n\`${uuid}\``;
-        },
         error_generic: "❌ An error occurred while checking your status\\. Please try again later\\.",
         errorMenu: "An error occurred displaying the menu\\. Please try again\\.",
         
+        // <<<< CHANGE START >>>>
+        // --- General Errors & System Messages ---
+        permission_denied: "⛔️ You are not authorized to access this section.",
+        errorServerNotFound: "⚠️ The requested server was not found.",
+        // <<<< CHANGE END >>>>
+
         // --- Language Selection ---
         choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
         language_changed: "✅ Language successfully changed to English\\.",
@@ -194,6 +205,15 @@ const languages = {
         btnAddServer: "➕ Add Server",
         btnRemoveServer: "➖ Remove Server",
         promptAddServerIP: "Please enter the server's IP address or domain:",
+        // <<<< CHANGE START >>>>
+        rconConnecting: (serverName) => `⏳ Connecting to *${escapeMarkdownV2Internal(serverName)}*...`,
+        rconSuccess: (serverName) => `✅ Successfully connected to *${escapeMarkdownV2Internal(serverName)}*\\.\n\nYou can now send RCON commands\\.\nUse \`/disconnect\` to exit\\.`,
+        rconFailed: (serverName, error) => `❌ Failed to connect to *${escapeMarkdownV2Internal(serverName)}*\\.\n*Reason:* \`${error}\``,
+        errorNoServersToDelete: "There are no servers to delete.",
+        promptDeleteServer: "Which server do you want to delete?",
+        confirmDeleteServer: "Are you sure you want to delete this server? This action cannot be undone.",
+        deleteServerSuccess: "✅ Server successfully deleted.",
+        // <<<< CHANGE END >>>>
 
         // --- Account Panel ---
         accountPanelTitle: "🔧 *Account Management Panel*\n\nUse the options below to manage your account:",
@@ -209,12 +229,10 @@ const languages = {
         promptUsername: "✅ Your game edition has been saved\\.\n\nPlease enter your exact in\\-game username:",
         errorInvalidUsername: "⚠️ Invalid username\\.\nThe username must be between 3 and 16 characters and can only contain English letters, numbers, and underscores \\(\\_\\)\\. Please try again\\.",
         errorUsernameTaken: (admin) => `You are not allowed to use this username because it has been taken by someone else\\.\nNeed help? Message @${admin}`,
-        promptAge: (username) => `✅ Username "${username}" has been saved\\.\n\nPlease enter your age\nExample: \`15\``,
+        promptAge: (username) => `✅ Username "${escapeMarkdownV2Internal(username)}" has been saved\\.\n\nPlease enter your age\nExample: \`15\``,
         errorInvalidAge: "⚠️ The entered age is not valid\\. Please enter a number between 10 and 70\\.",
-        registrationSuccess: (admin) => {
-            const escapedAdmin = escapeMarkdownV2Internal(admin);
-            return `✅ Your initial registration was successful\\!\\n\\nThis is your registration code\\. Please copy it and send it to the support admin \\(@${escapedAdmin}\\) to finalize your registration\\.`;
-        },
+        registrationSuccess: "✅ Your initial registration was successful\\!\n\nTo finalize your account activation, please click the button below and send the prepared message\\.",
+        btnFinalizeRegistration: "✅ Finalize Registration (Click Here)",
         errorRegistrationFailed: "❌ Unfortunately, an error occurred during the final step of registration\\. Please try again later\\.",
 
         // --- Admin Commands ---
@@ -230,15 +248,15 @@ const languages = {
         promptServerPort: "Great\\! Now enter the server port:",
         promptServerPassword: "Alright\\. Now enter the RCON server password:",
         promptServerName: "Finally, what name should this server be saved as? \\(This name must be unique\\)",
-        testingConnection: (name) => `⏳ Server "${name}" saved\\. Testing connection\\.\\.\\.`,
+        testingConnection: (name) => `⏳ Server "${escapeMarkdownV2Internal(name)}" saved\\. Testing connection\\.\\.\\.`,
         connectionSuccess: "✅ Server successfully saved and connection tested\\!",
-        errorServerDuplicate: (name) => `⚠️ Error: A server with the name "${name}" already exists\\. Please try again\\.`,
+        errorServerDuplicate: (name) => `⚠️ Error: A server with the name "${escapeMarkdownV2Internal(name)}" already exists\\. Please try again\\.`,
         errorConnectionFailed: "❌ Server was saved, but the RCON connection failed\\. Please check the information\\.",
         btnRetryConnection: "🔁 Retry Connection",
         btnEditServer: "✏️ Edit Server Info",
         promptAdminName: (id) => `User ID \\(${id}\\) received\\. Now, enter a name for this admin:`,
         errorInvalidAdminId: "Error: Please enter a valid numeric ID or forward a message from the target user\\.",
-        addAdminSuccess: (name, id) => `✅ New admin "${name}" with ID "${id}" was added successfully\\.`,
+        addAdminSuccess: (name, id) => `✅ New admin "${escapeMarkdownV2Internal(name)}" with ID "${id}" was added successfully\\.`,
         errorAdminDuplicate: "⚠️ This user is already an admin\\.",
         errorAddAdminFailed: "❌ An error occurred while saving the admin\\.",
         
@@ -295,6 +313,8 @@ function getText(userLang, key, ...args) {
     const template = languages[lang][key];
 
     if (template === undefined) {
+        // Fallback for safety, returns the key itself.
+        console.warn(`[i18n] Missing translation for key: ${key} in language: ${lang}`);
         return key;
     }
 

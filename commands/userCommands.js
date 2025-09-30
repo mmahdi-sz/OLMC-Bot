@@ -1,9 +1,9 @@
-// const db = require('../database'); // <<<< حذف شد >>>>
 const logger = require('../logger');
 const { getText } = require('../i18n');
 const registrationHandler = require('../handlers/registrationHandler');
 
 async function sendLanguageSelectionMenu(bot, chatId, messageId = null) {
+    // از آنجایی که این متن ثابت است، زبان 'fa' را به عنوان پیش‌فرض انتخاب می‌کنیم
     const message = getText('fa', 'choose_language_prompt');
     const keyboard = {
         inline_keyboard: [
@@ -12,7 +12,6 @@ async function sendLanguageSelectionMenu(bot, chatId, messageId = null) {
         ]
     };
     
-    // --- بهبود: اگر از داخل منو فراخوانی شود، پیام را ویرایش می‌کند ---
     if (messageId) {
         try {
             await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
@@ -27,12 +26,14 @@ const startCommand = {
     name: '/start',
     regex: /\/start(?: (.+))?$/,
     execute: async (bot, msg, match, appConfig, db) => {
+        // <<<< CHANGE START >>>>
+        // متغیر supportBotUsername برای استفاده‌های آتی از appConfig استخراج می‌شود.
         const { superAdminId, supportAdminUsername } = appConfig;
+        // <<<< CHANGE END >>>>
         const chatId = msg.chat.id;
         const userId = msg.from.id;
         const referrerId = match[1];
 
-        // --- بهبود: تشخیص اینکه آیا دستور از طریق یک دکمه (callback) فراخوانی شده است ---
         const isCallback = !!msg.reply_markup;
 
         const activeWizard = await db.getWizardState(userId);
@@ -43,8 +44,11 @@ const startCommand = {
         
         logger.info('CMD_START', '/start command received', { userId, isCallback });
         
-        let userLang = await db.getUserLanguage(userId);
+        const userLang = await db.getUserLanguage(userId);
         
+        // اگر کاربر زبان انتخاب نکرده باشد، ابتدا منوی انتخاب زبان نمایش داده می‌شود.
+        //getUserLanguage یک مقدار پیش‌فرض 'fa' برمی‌گرداند، بنابراین این شرط تقریباً هیچ‌وقت برقرار نمی‌شود
+        // مگر اینکه منطق getUserLanguage تغییر کند. برای اطمینان باقی می‌ماند.
         if (!userLang) {
             return sendLanguageSelectionMenu(bot, chatId, isCallback ? msg.message_id : null);
         }
@@ -52,11 +56,10 @@ const startCommand = {
         const isSuperAdmin = (userId === superAdminId);
         const isRegularAdmin = await db.isAdmin(userId);
         
-        // --- بهبود: متن و دکمه‌ها قبل از ارسال آماده می‌شوند ---
         let responseText = '';
         let responseKeyboard = {};
 
-        // Admin Menu
+        // منوی ادمین
         if (isSuperAdmin || isRegularAdmin) {
             responseText = getText(userLang, 'greeting_admin');
             const baseKeyboard = [
@@ -68,38 +71,40 @@ const startCommand = {
             }
             responseKeyboard = { inline_keyboard: baseKeyboard };
         } else {
-            // Regular User Menu
+            // منوی کاربر عادی
             try {
                 const registration = await db.getRegistrationByTelegramId(userId);
                 if (registration) {
+                    // <<<< CHANGE START >>>>
+                    // منطق برای وضعیت 'pending' ساده‌سازی شد، زیرا کاربر اکنون دکمه مستقیم دارد.
                     if (registration.status === 'pending') {
-                        responseText = getText(userLang, 'greeting_user_pending', supportAdminUsername, registration.uuid);
-                        // برای این پیام دکمه‌ای وجود ندارد
+                        // این پیام برای موارد نادری است که کاربر دکمه را نادیده گرفته و دوباره /start را می‌زند.
+                        responseText = `⏳ ثبت‌نام شما هنوز نهایی نشده است\\. لطفاً به پیامی که در انتهای ثبت‌نام دریافت کردید برگشته و روی دکمه نهایی‌سازی کلیک کنید\\. اگر پیام را پیدا نمی‌کنید، با ادمین \\(@${supportAdminUsername}\\) تماس بگیرید\\.`;
                     } else if (registration.status === 'approved') {
                         responseText = getText(userLang, 'greeting_user_approved');
                         responseKeyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
                     }
+                    // <<<< CHANGE END >>>>
                 } else {
                     // اگر ثبت‌نامی وجود ندارد، فرآیند را شروع کن
                     return registrationHandler.startRegistration(bot, msg, referrerId, db);
                 }
             } catch (error) {
                 logger.error('CMD_START', `Error in /start command for user ${userId}`, { error: error.message });
-                responseText = getText(userLang || 'fa', 'error_generic');
+                responseText = getText(userLang, 'error_generic');
             }
         }
 
-        // --- بهبود: منطق اصلی برای ویرایش یا ارسال پیام جدید ---
+        // منطق ارسال یا ویرایش پیام
         if (isCallback) {
             try {
                 await bot.editMessageText(responseText, {
                     chat_id: chatId,
                     message_id: msg.message_id,
                     reply_markup: responseKeyboard,
-                    parse_mode: 'MarkdownV2' // برای پیام‌های خاص استفاده می‌شود
+                    parse_mode: 'MarkdownV2'
                 });
             } catch (error) {
-                // اگر پیام تغییری نکرده، خطا را نادیده بگیر
                 if (!error.message.includes('message is not modified')) {
                     logger.error('CMD_START', 'Failed to edit start menu message', { error: error.message });
                 }
@@ -120,7 +125,6 @@ const languageCommand = {
     execute: async (bot, msg, match, appConfig, db) => {
         const chatId = msg.chat.id;
         logger.info('CMD_LANG', '/language command received', { userId: msg.from.id });
-        // --- بهبود: تشخیص می‌دهد که آیا باید پیام را ویرایش کند یا جدید ارسال کند ---
         const isCallback = !!msg.reply_markup;
         await sendLanguageSelectionMenu(bot, chatId, isCallback ? msg.message_id : null);
     }

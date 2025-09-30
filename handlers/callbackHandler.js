@@ -1,6 +1,6 @@
 // handlers/callbackHandler.js
 
-const { Rcon } = require('rcon-client'); // <<<< اضافه شد >>>>
+const { Rcon } = require('rcon-client'); 
 const rankManager = require('./rankManager.js');
 const db = require('../database.js');
 const logger = require('../logger.js');
@@ -38,7 +38,7 @@ async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
     }
 }
 
-// <<<< بخش بهبود یافته >>>>
+
 async function showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang = 'fa') {
     const { message: { chat: { id: chatId }, message_id: messageId }, from: { id: userId } } = callbackQuery;
     try {

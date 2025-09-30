@@ -4,7 +4,6 @@ const logger = require('../logger');
 const db = require('../database');
 
 const commands = new Map();
-// بهبود: این ثابت به داخل تابع loadConfig منتقل می‌شود تا بخشی از آبجکت کانفیگ سراسری باشد.
 
 /**
  * Loads all command handlers from the /commands directory.
@@ -17,7 +16,6 @@ function loadCommands(bot, appConfig) {
 
         for (const file of commandFiles) {
             const filePath = path.join(commandsPath, file);
-            // --- بهبود: افزایش پایداری با مدیریت خطای هر فایل به صورت جداگانه ---
             try {
                 const commandList = require(filePath);
 
@@ -25,8 +23,8 @@ function loadCommands(bot, appConfig) {
                     for (const command of commandList) {
                         if (command.name && command.execute && command.regex) {
                             commands.set(command.name, command.execute);
-                            // پاس دادن یک کانتکست مشترک (db, appConfig) به تمام دستورات
                             bot.onText(command.regex, (msg, match) => {
+                                // پاس دادن یک کانتکست مشترک (db, appConfig) به تمام دستورات
                                 command.execute(bot, msg, match, appConfig, db);
                             });
                             logger.info('CMD_LOADER', `Loaded command: ${command.name}`);
@@ -36,7 +34,6 @@ function loadCommands(bot, appConfig) {
                     }
                 }
             } catch (error) {
-                // اگر یک فایل دستور مشکل داشته باشد، فقط همان فایل نادیده گرفته شده و برنامه متوقف نمی‌شود.
                 logger.error('CMD_LOADER', `Failed to load commands from file: ${file}`, { error: error.message, stack: error.stack });
             }
         }
@@ -58,16 +55,19 @@ function getCommandHandler(commandName) {
 async function loadConfig() {
     logger.info('APP_CONFIG', 'Loading application configuration...');
     try {
-        // --- بهبود: متغیر VALID_MODULES به اینجا منتقل شده است ---
         const validModules = ['chat', 'players', 'rank', 'status', 'online', 'auction'];
         
         const config = {
             superAdminId: parseInt(process.env.SUPER_ADMIN_ID, 10),
             supportAdminUsername: process.env.SUPPORT_ADMIN_USERNAME || 'otherland_admin',
             mainBotUsername: process.env.MAIN_BOT_USERNAME || 'OLMCrobot',
+            // <<<< CHANGE START >>>>
+            // متغیر جدید برای نام کاربری یوزربات پشتیبانی اضافه شد
+            supportBotUsername: process.env.SUPPORT_BOT_USERNAME || 'YourSupportBotUsername',
+            // <<<< CHANGE END >>>>
             mainGroupId: null,
             topicIds: {},
-            validModules: validModules, // اضافه شدن به آبجکت کانفیگ
+            validModules: validModules,
             rcon: {
                 host: process.env.BRIDGE_RCON_HOST,
                 port: parseInt(process.env.BRIDGE_RCON_PORT, 10),
@@ -80,6 +80,17 @@ async function loadConfig() {
             }
         };
 
+        // <<<< CHANGE START >>>>
+        // یک لاگ هشدار اضافه شد تا به کاربر اطلاع دهد که باید نام کاربری یوزربات را تنظیم کند
+        if (config.supportBotUsername === 'YourSupportBotUsername') {
+            logger.warn('APP_CONFIG', 'SUPPORT_BOT_USERNAME is not set in the .env file. The registration finalization button may not work correctly.');
+        }
+        // <<<< CHANGE END >>>>
+
+        if (!config.superAdminId) {
+             logger.error('APP_CONFIG', "FATAL: SUPER_ADMIN_ID is not set in the .env file.");
+             process.exit(1);
+        }
         if (!config.rcon.host || !config.rcon.port || !config.rcon.password) {
             logger.error('APP_CONFIG', "FATAL: RCON configuration is missing from the .env file.");
             process.exit(1);
@@ -113,5 +124,4 @@ module.exports = {
     loadCommands,
     getCommandHandler,
     loadConfig,
-    // بهبود: دیگر نیازی به export کردن VALID_MODULES به صورت جداگانه نیست.
 };
