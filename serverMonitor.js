@@ -133,7 +133,7 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
         if (currentPlayers.length > 0) {
             message += currentPlayers.map(p => `\\- ${escapeMarkdownV2(p)}`).join('\n');
         } else {
-            message += '\\- در حال حاضر هیچ بازیکنی آنلاین نیست.';
+            message += '\\- در حال حاضر هیچ بازیکنی آنلاین نیست\\.';
         }
         
         // <<<< بخش بهبود یافته (حل مشکل اصلی) >>>>
