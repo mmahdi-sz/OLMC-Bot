@@ -3,10 +3,10 @@
 const { Tail } = require('tail');
 const fs = require('fs');
 const logger = require('./logger.js');
+const verifyHandler = require('./verify.js'); // بخش افزوده شده
 
 const MODULE_NAME = 'LOG_READER';
 
-// <<<< CHANGE START >>>> (Problem 7: Excessive DB Queries)
 // Cache for log reader settings to avoid repeated DB calls.
 let logConfig = {
     mainGroupId: null,
@@ -28,7 +28,6 @@ async function loadLogReaderConfig(db) {
         logger.error(MODULE_NAME, 'Failed to load log reader configuration.', { error: error.message });
     }
 }
-// <<<< CHANGE END >>>>
 
 const filteredWordsRaw = process.env.FILTERED_WORDS || '';
 const filteredWords = filteredWordsRaw.split(',').map(word => word.trim()).filter(Boolean);
@@ -43,7 +42,6 @@ function escapeHTML(str) {
 
 /**
  * Processes auction-related log lines.
- * This function now uses the cached logConfig instead of querying the DB.
  */
 async function handleAuctionLog(line, bot) {
     if (!logConfig.mainGroupId || !logConfig.topicIds.auction) return;
@@ -51,8 +49,6 @@ async function handleAuctionLog(line, bot) {
     let message = '';
     let eventType = 'unknown';
 
-    // <<<< CHANGE START >>>> (Problem 4: Brittle Regex)
-    // Regex made more flexible with \s+ to handle variable spacing.
     const addedMatch = line.match(/(\w+)\s+added\s+x(\d+)\s+(.+?)\s+in\s+auction\s+for\s+([\d,.\s]+?)\./);
     if (addedMatch) {
         eventType = 'item_added';
@@ -68,7 +64,6 @@ async function handleAuctionLog(line, bot) {
         const cleanPrice = price.replace(/[\s,]/g, '');
         message = `✅ *آیتم فروخته شد*\n\n🙋‍♂️ *خریدار:* \`${buyer}\`\n👨‍💼 *فروشنده:* \`${seller}\`\n🏷️ *نوع آیتم:* \`${itemName}\`\n🔢 *تعداد:* \`${quantity}\`\n💰 *قیمت:* \`${cleanPrice} OM\``;
     }
-    // <<<< CHANGE END >>>>
 
     if (message) {
         logger.debug(MODULE_NAME, `Detected auction event`, { type: eventType });
@@ -81,29 +76,20 @@ async function handleAuctionLog(line, bot) {
             logger.error(MODULE_NAME, 'Failed to send auction house message', { error: error.message });
         }
     } else {
-        // <<<< CHANGE START >>>> (Problem 4: Silent Failure)
-        // Log a warning if a line contains the keyword but doesn't match any regex.
         logger.warn(MODULE_NAME, 'An auction log line was detected but not parsed. The log format may have changed.', { line });
-        // <<<< CHANGE END >>>>
     }
 }
 
 /**
  * Processes in-game chat messages.
- * This function now uses the cached logConfig instead of querying the DB.
  */
 async function handleChatLog(line, bot) {
     if (!logConfig.mainGroupId || !logConfig.topicIds.chat) return;
-
-    // <<<< CHANGE START >>>> (Problem 4: Brittle Regex)
-    // Regex made more robust against small format changes.
+    
     const match = line.match(/\[Not Secure\]\s*([^:]+):\s*(.*)/);
-    // <<<< CHANGE END >>>>
     
     if (!match) {
-        // <<<< CHANGE START >>>> (Problem 4: Silent Failure)
         logger.warn(MODULE_NAME, 'A chat log line was detected but not parsed. The log format may have changed.', { line });
-        // <<<< CHANGE END >>>>
         return;
     }
 
@@ -143,7 +129,7 @@ async function handleChatLog(line, bot) {
 /**
  * Watches the log file and dispatches lines to appropriate handlers.
  */
-function watchLogFile(logFilePath, bot, db) {
+function watchLogFile(logFilePath, bot, db, getRconClient) { // پارامتر جدید
     logger.info(MODULE_NAME, `Attempting to watch log file at: ${logFilePath}`);
     
     const options = {
@@ -161,30 +147,39 @@ function watchLogFile(logFilePath, bot, db) {
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
         tail.on('line', (line) => {
-            // The handlers no longer need the 'db' object for settings.
             if (line.includes('[zAuctionHouseV3')) {
                 handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {
                 handleChatLog(line, bot);
+            } 
+            // --- بخش افزوده شده: مدیریت درخواست‌های وریفای از لاگ ---
+            else if (line.includes('[VERIFY_REQUEST]')) {
+                const match = line.match(/\[VERIFY_REQUEST\] Player: (\w{3,16})/);
+                if (match && match[1]) {
+                    const username = match[1];
+                    logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
+                    // ارسال درخواست به ماژول وریفای به همراه rconClient
+                    verifyHandler.handleStartVerificationFromGame(username, getRconClient());
+                }
             }
         });
 
         tail.on('error', (error) => {
             logger.error(MODULE_NAME, 'Error watching log file. Re-watching in 10s...', { error: error.message });
             try { tail.unwatch(); } catch (e) { /* ignore */ }
-            setTimeout(() => watchLogFile(logFilePath, bot, db), 10000);
+            setTimeout(() => watchLogFile(logFilePath, bot, db, getRconClient), 10000);
         });
 
     } catch (error) {
         logger.error(MODULE_NAME, `Failed to start tailing. Retrying in 10s...`, { error: error.message });
-        setTimeout(() => watchLogFile(logFilePath, bot, db), 10000);
+        setTimeout(() => watchLogFile(logFilePath, bot, db, getRconClient), 10000);
     }
 }
 
 /**
  * Initializes the log reader module.
  */
-async function startLogReader(bot, db) {
+async function startLogReader(bot, db, getRconClient) { // پارامتر جدید
     const logFilePath = process.env.SERVER_LOG_FILE_PATH;
 
     if (!logFilePath) {
@@ -192,12 +187,9 @@ async function startLogReader(bot, db) {
         return;
     }
 
-    // <<<< CHANGE START >>>> (Problem 7: Excessive DB Queries)
-    // Load the configuration once at the start.
     await loadLogReaderConfig(db);
-    // <<<< CHANGE END >>>>
 
-    watchLogFile(logFilePath, bot, db);
+    watchLogFile(logFilePath, bot, db, getRconClient);
 }
 
 // Export the reload function so it can be called from other modules if settings change.

@@ -130,10 +130,8 @@ async function handleRegistrationWizard(bot, msg, db, appConfig) {
             const isTaken = await db.isUsernameTaken(username);
             if (isTaken) {
                 logger.warn(MODULE_NAME, `User ${userId} tried to register with a taken username`, { username });
-                // <<<< CHANGE START >>>>
-                // استفاده از appConfig برای دریافت نام کاربری ادمین
+
                 await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
-                // <<<< CHANGE END >>>>
                 return true;
             }
 

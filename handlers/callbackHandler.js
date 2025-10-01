@@ -6,6 +6,7 @@ const db = require('../database.js');
 const logger = require('../logger.js');
 const { getText } = require('../i18n.js');
 const registrationHandler = require('./registrationHandler.js');
+const verifyHandler = require('../verify.js'); // بخش افزوده شده
 
 const MODULE_NAME = 'CALLBACK_HANDLER';
 
@@ -109,11 +110,26 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return startCommandHandler(bot, updatedMsg, ['/start'], appConfig, db);
         }
         
+        // --- بخش بهبود یافته: منوی مدیریت اکانت ---
         if (action === 'manage_account') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const message = getText(userLang, 'accountPanelTitle');
+            
+            // بررسی وضعیت وریفای کاربر
+            const isVerified = await db.getVerificationStatus(userId);
+            let infoButton;
+
+            if (isVerified) {
+                // اگر وریفای شده، دکمه آمار را نشان بده
+                infoButton = { text: getText(userLang, 'btnPlayerStats'), callback_data: 'show_player_stats' };
+            } else {
+                // اگر وریفای نشده، دکمه وریفای را نشان بده
+                infoButton = { text: getText(userLang, 'btnVerifyAccount'), callback_data: 'start_verification' };
+            }
+
             const keyboard = { inline_keyboard: [
                 [{ text: getText(userLang, 'btnReferralInfo'), callback_data: 'show_referral_info' }],
+                [infoButton], // دکمه شرطی اینجا قرار می‌گیرد
                 [{ text: getText(userLang, 'btnBack'), callback_data: 'user_start_menu' }]
             ]};
             return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
@@ -134,6 +150,34 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
         }
 
+        // --- بخش افزوده شده: مدیریت منوی وریفای ---
+        if (action === 'start_verification') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+            const message = getText(userLang, 'verifyChooseMethod');
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: getText(userLang, 'btnVerifyFromBot'), callback_data: 'verify_from_bot' }],
+                    [{ text: getText(userLang, 'btnVerifyFromGame'), callback_data: 'verify_from_game' }],
+                    [{ text: getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]
+                ]
+            };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+        }
+
+        if (action === 'verify_from_bot') {
+            await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ در حال ساخت کد...' });
+            const result = await verifyHandler.handleStartVerificationFromBot(userId, userLang);
+            return bot.editMessageText(result.message, { chat_id: chatId, message_id: messageId, reply_markup: result.keyboard, parse_mode: 'MarkdownV2' });
+        }
+
+        if (action === 'verify_from_game') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+            const message = getText(userLang, 'verifyInstructionsGameToBot');
+            const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnBackToVerifyMenu'), callback_data: 'start_verification' }]] };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+        }
+
+
         // --- Admin-only Actions ---
         const isRegularAdmin = await db.isAdmin(userId);
         if (!isSuperAdmin && !isRegularAdmin) {
@@ -145,8 +189,7 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         if (action === 'rcon_menu') {
             return showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang);
         }
-
-        // <<<< بخش جدید >>>>
+        
         if (action.startsWith('connect_')) {
             const serverId = parseInt(action.split('_')[1], 10);
             const ownerId = isSuperAdmin ? userId : appConfig.superAdminId;
@@ -179,7 +222,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             }
             return;
         }
-        // <<<< پایان بخش جدید >>>>
         
         if (action === 'manage_rank_list') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
@@ -192,7 +234,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return showAdminPanel(bot, callbackQuery, userLang);
         }
         
-        // ... (بخش‌های add_admin و list_admins بدون تغییر)
         if (action === 'add_admin') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
             await db.setWizardState(userId, 'add_admin', 'awaiting_admin_id', {});
@@ -209,7 +250,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
                   ).join('\n\n');
             return bot.editMessageText(adminList, { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2', reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]] } });
         }
-        // ...
 
         if (action.startsWith('remove_admin_')) {
             // ... (منطق این بخش بدون تغییر باقی می‌ماند)
@@ -220,8 +260,7 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             await db.setWizardState(userId, 'add_server', 'awaiting_ip', {});
             return bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId });
         }
-
-        // <<<< بخش جدید >>>>
+        
         if (action.startsWith('remove_server_')) {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
             const parts = action.split('_');
@@ -249,7 +288,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
                 return showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang);
             }
         }
-        // <<<< پایان بخش جدید >>>>
 
         logger.warn(MODULE_NAME, `Unknown callback action received`, { action, userId });
 
