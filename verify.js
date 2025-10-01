@@ -90,7 +90,8 @@ async function handleStartVerificationFromGame(username, getRconClient) {
     const isRegistered = await db.isUsernameTaken(username);
 
     if (!isRegistered) {
-        const errorMsg = `msg ${username} شما ابتدا باید در ربات تلگرام ثبت نام کنید.`;
+        // بخش اصلاح شده: استفاده از 'tell'
+        const errorMsg = `tell ${username} شما ابتدا باید در ربات تلگرام ثبت نام کنید.`;
         try {
             await rcon.send(errorMsg);
         } catch (e) {
@@ -100,9 +101,10 @@ async function handleStartVerificationFromGame(username, getRconClient) {
     }
 
     const code = generateRandomCode();
-    await db.createVerificationCodeForGameUser(username, code); // This function needs to be added to database.js
+    await db.createVerificationCodeForGameUser(username, code);
 
-    const successMsg = `msg ${username} کد تایید شما: ${code} - این کد را در ربات تلگرام ارسال کنید.`;
+    // بخش اصلاح شده: استفاده از 'tell'
+    const successMsg = `tell ${username} کد تایید شما: ${code} - این کد را در ربات تلگرام ارسال کنید.`;
     try {
         await rcon.send(successMsg);
         logger.success(MODULE_NAME, `Successfully sent verification code ${code} to player ${username} via RCON.`);
@@ -115,5 +117,5 @@ async function handleStartVerificationFromGame(username, getRconClient) {
 module.exports = {
     handleStartVerificationFromBot,
     handleCodeSubmission,
-    handleStartVerificationFromGame, // بخش افزوده شده
+    handleStartVerificationFromGame,
 };
