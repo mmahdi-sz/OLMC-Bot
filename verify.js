@@ -90,10 +90,11 @@ async function handleStartVerificationFromGame(username, getRconClient) {
     const isRegistered = await db.isUsernameTaken(username);
 
     if (!isRegistered) {
-        // بخش اصلاح شده: استفاده از 'tell'
-        const errorMsg = `tell ${username} شما ابتدا باید در ربات تلگرام ثبت نام کنید.`;
+        // بخش اصلاح شده: استفاده از 'minecraft:tell'
+        const errorMsg = `minecraft:tell ${username} شما ابتدا باید در ربات تلگرام ثبت نام کنید.`;
         try {
-            await rcon.send(errorMsg);
+            const response = await rcon.send(errorMsg);
+            logger.info(MODULE_NAME, "RCON response for 'not registered' message:", { response });
         } catch (e) {
             logger.error(MODULE_NAME, "Failed to send 'not registered' message via RCON.", { error: e.message });
         }
@@ -103,11 +104,12 @@ async function handleStartVerificationFromGame(username, getRconClient) {
     const code = generateRandomCode();
     await db.createVerificationCodeForGameUser(username, code);
 
-    // بخش اصلاح شده: استفاده از 'tell'
-    const successMsg = `tell ${username} کد تایید شما: ${code} - این کد را در ربات تلگرام ارسال کنید.`;
+    // بخش اصلاح شده: استفاده از 'minecraft:tell'
+    const successMsg = `minecraft:tell ${username} کد تایید شما: ${code} - این کد را در ربات تلگرام ارسال کنید.`;
     try {
-        await rcon.send(successMsg);
+        const response = await rcon.send(successMsg);
         logger.success(MODULE_NAME, `Successfully sent verification code ${code} to player ${username} via RCON.`);
+        logger.info(MODULE_NAME, "RCON response for success message:", { response });
     } catch (e) {
         logger.error(MODULE_NAME, "Failed to send verification code via RCON.", { error: e.message });
     }
