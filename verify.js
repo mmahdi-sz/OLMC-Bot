@@ -135,9 +135,64 @@ async function handleStartVerificationFromGame(username, getRconClient, bot) {
     }
 }
 
+// --- تابع جدید برای بهبود ---
+/**
+ * Handles the submission of a verification code from inside the game.
+ * (Bot -> Game flow, initiated by logReader)
+ * @param {string} username - The Minecraft username of the player.
+ * @param {string} code - The 6-digit code submitted by the player.
+ * @param {function} getRconClient - A function to get the active RCON client.
+ */
+async function handleVerifyFromGame(username, code, getRconClient) {
+    const rcon = getRconClient();
+    if (!rcon) {
+        logger.warn(MODULE_NAME, `RCON client is not available. Cannot process verification for ${username}.`);
+        return;
+    }
+
+    try {
+        const registration = await db.getRegistrationByUsername(username);
+        if (!registration) {
+            // این حالت بعید است چون برای دریافت کد باید ثبت‌نام کرده باشد، اما برای امنیت بیشتر چک می‌شود
+            await rcon.send(`minecraft:tell ${username} خطای داخلی: اطلاعات ثبت‌نام شما یافت نشد.`);
+            return;
+        }
+
+        const userId = registration.telegram_user_id;
+        const codeOwnerUserId = await db.findTelegramIdByCode(code); // فرض می‌کنیم این تابع در db.js ساخته شود
+        
+        if (!codeOwnerUserId) {
+            logger.warn(MODULE_NAME, `Player ${username} submitted an invalid or expired code ${code} in-game.`);
+            await rcon.send(`minecraft:tell ${username} کد وارد شده نامعتبر یا منقضی شده است.`);
+            return;
+        }
+
+        if (userId !== codeOwnerUserId) {
+            logger.warn(MODULE_NAME, `Security Alert: Player ${username} tried to use a code belonging to another user.`);
+            await rcon.send(`minecraft:tell ${username} این کد متعلق به شما نیست.`);
+            return;
+        }
+
+        const success = await db.verifyUser(userId, username);
+        if (success) {
+            await db.deleteVerificationCode(code);
+            logger.success(MODULE_NAME, `Player ${username} (TG: ${userId}) successfully verified from in-game command.`);
+            await rcon.send(`minecraft:tell ${username} حساب شما با موفقیت به تلگرام متصل شد!`);
+        } else {
+            throw new Error('Database update failed.');
+        }
+
+    } catch (error) {
+        logger.error(MODULE_NAME, 'An error occurred during in-game verification.', { username, code, error: error.message });
+        await rcon.send(`minecraft:tell ${username} یک خطای پیش‌بینی نشده رخ داد. لطفا با ادمین تماس بگیرید.`);
+    }
+}
+// --- پایان تابع جدید ---
+
 
 module.exports = {
     handleStartVerificationFromBot,
     handleCodeSubmission,
     handleStartVerificationFromGame,
+    handleVerifyFromGame, // --- اکسپورت کردن تابع جدید ---
 };

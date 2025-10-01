@@ -259,16 +259,11 @@ async function isUsernameTaken(username) {
     return rows.length > 0;
 }
 
-// --- بخش جدید اضافه شده برای بهبود ---
-/**
- * Finds a registration record based on the in-game username.
- */
 async function getRegistrationByUsername(gameUsername) {
     const sql = "SELECT telegram_user_id, game_username, status FROM registrations WHERE game_username = ? LIMIT 1";
     const [rows] = await executeAndLog(sql, [gameUsername]);
     return rows.length > 0 ? rows[0] : null;
 }
-// --- پایان بخش جدید ---
 
 
 // --- Wizard State Management ---
@@ -331,6 +326,17 @@ async function findUsernameByCode(code) {
     return rows.length > 0 ? rows[0].game_username : null;
 }
 
+// --- بخش جدید اضافه شده برای بهبود ---
+/**
+ * Finds a Telegram user ID associated with a verification code. (For Bot -> Game flow)
+ */
+async function findTelegramIdByCode(code) {
+    const sql = "SELECT telegram_user_id FROM verification_codes WHERE code = ? AND telegram_user_id IS NOT NULL LIMIT 1";
+    const [rows] = await executeAndLog(sql, [code]);
+    return rows.length > 0 ? rows[0].telegram_user_id : null;
+}
+// --- پایان بخش جدید ---
+
 /**
  * Sets a user's status to verified.
  */
@@ -360,14 +366,15 @@ const db = {
     updateRankGroupSortOrder,
     addRegistration, deleteRegistration, getRegistrationByUuid, getRegistrationByTelegramId, updateRegistrationStatus,
     isUsernameTaken,
-    getRegistrationByUsername, // --- اکسپورت کردن تابع جدید ---
+    getRegistrationByUsername,
     setWizardState, getWizardState, deleteWizardState,
     setUserLanguage, getUserLanguage,
     // Verification exports
     getVerificationStatus,
     createVerificationCodeForUser,
-    createVerificationCodeForGameUser, // بخش افزوده شده
+    createVerificationCodeForGameUser,
     findUsernameByCode,
+    findTelegramIdByCode, // --- اکسپورت کردن تابع جدید ---
     verifyUser,
     deleteVerificationCode,
 };

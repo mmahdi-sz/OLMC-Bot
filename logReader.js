@@ -147,20 +147,31 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
         tail.on('line', (line) => {
-            const verifyMatch = line.match(/(\w{3,16}) issued server command: \/verify$/);
+            // --- بخش بهبود یافته ---
+            // Regex جدید برای تشخیص دستور /verify به همراه کد 6 رقمی
+            const verifyWithCodeMatch = line.match(/(\w{3,16}) issued server command: \/verify (\d{6})$/);
+            // Regex قبلی برای تشخیص دستور /verify خالی
+            const verifyEmptyMatch = line.match(/(\w{3,16}) issued server command: \/verify$/);
 
-            if (verifyMatch && verifyMatch[1]) {
-                const username = verifyMatch[1];
+            if (verifyWithCodeMatch && verifyWithCodeMatch[1] && verifyWithCodeMatch[2]) {
+                const username = verifyWithCodeMatch[1];
+                const code = verifyWithCodeMatch[2];
+                logger.info(MODULE_NAME, `Verification submission detected from player: ${username} with code ${code}`);
+                // تابع جدیدی که در مرحله بعد خواهیم ساخت را فراخوانی می‌کند
+                verifyHandler.handleVerifyFromGame(username, code, getRconClient);
+
+            } else if (verifyEmptyMatch && verifyEmptyMatch[1]) {
+                const username = verifyEmptyMatch[1];
                 logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
-                // --- بخش بهبود یافته ---
-                // نمونه ربات (bot) به عنوان آرگومان سوم پاس داده می‌شود تا ماژول وریفای بتواند پیام ارسال کند.
+                // این منطق قبلی برای ارسال کد به بازیکن است و دست‌نخورده باقی می‌ماند
                 verifyHandler.handleStartVerificationFromGame(username, getRconClient, bot);
-                // --- پایان بخش بهبود یافته ---
+            
             } else if (line.includes('[zAuctionHouseV3')) {
                 handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {
                 handleChatLog(line, bot);
             }
+            // --- پایان بخش بهبود یافته ---
         });
 
         tail.on('error', (error) => {
