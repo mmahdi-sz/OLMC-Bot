@@ -3,7 +3,7 @@
 const { Tail } = require('tail');
 const fs = require('fs');
 const logger = require('./logger.js');
-const verifyHandler = require('./verify.js'); // بخش افزوده شده
+const verifyHandler = require('./verify.js');
 
 const MODULE_NAME = 'LOG_READER';
 
@@ -89,7 +89,7 @@ async function handleChatLog(line, bot) {
     const match = line.match(/\[Not Secure\]\s*([^:]+):\s*(.*)/);
     
     if (!match) {
-        logger.warn(MODULE_NAME, 'A chat log line was detected but not parsed. The log format may have changed.', { line });
+        // This is not a standard chat message, which is fine. We just ignore it.
         return;
     }
 
@@ -129,7 +129,7 @@ async function handleChatLog(line, bot) {
 /**
  * Watches the log file and dispatches lines to appropriate handlers.
  */
-function watchLogFile(logFilePath, bot, db, getRconClient) { // پارامتر جدید
+function watchLogFile(logFilePath, bot, db, getRconClient) {
     logger.info(MODULE_NAME, `Attempting to watch log file at: ${logFilePath}`);
     
     const options = {
@@ -147,20 +147,17 @@ function watchLogFile(logFilePath, bot, db, getRconClient) { // پارامتر �
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
         tail.on('line', (line) => {
-            if (line.includes('[zAuctionHouseV3')) {
+            // --- بخش بهبود یافته: ترتیب if ها تغییر کرده است ---
+            const verifyMatch = line.match(/(\w{3,16}) issued server command: \/verify$/);
+
+            if (verifyMatch && verifyMatch[1]) {
+                const username = verifyMatch[1];
+                logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
+                verifyHandler.handleStartVerificationFromGame(username, getRconClient());
+            } else if (line.includes('[zAuctionHouseV3')) {
                 handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {
                 handleChatLog(line, bot);
-            } 
-            // --- بخش افزوده شده: مدیریت درخواست‌های وریفای از لاگ ---
-            else if (line.includes('[VERIFY_REQUEST]')) {
-                const match = line.match(/\[VERIFY_REQUEST\] Player: (\w{3,16})/);
-                if (match && match[1]) {
-                    const username = match[1];
-                    logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
-                    // ارسال درخواست به ماژول وریفای به همراه rconClient
-                    verifyHandler.handleStartVerificationFromGame(username, getRconClient());
-                }
             }
         });
 
@@ -179,7 +176,7 @@ function watchLogFile(logFilePath, bot, db, getRconClient) { // پارامتر �
 /**
  * Initializes the log reader module.
  */
-async function startLogReader(bot, db, getRconClient) { // پارامتر جدید
+async function startLogReader(bot, db, getRconClient) {
     const logFilePath = process.env.SERVER_LOG_FILE_PATH;
 
     if (!logFilePath) {

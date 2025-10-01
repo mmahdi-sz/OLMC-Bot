@@ -17,12 +17,8 @@ const languages = {
         greeting_user_approved: "🎉 به پنل کاربری خود خوش آمدید\\!\n\nاز طریق دکمه زیر می‌توانید اکانت خود را مدیریت کرده و لینک زیرمجموعه‌گیری خود را دریافت کنید\\.",
         error_generic: "❌ خطایی در بررسی وضعیت شما رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
         errorMenu: "خطایی در نمایش منو رخ داد\\. لطفاً دوباره تلاش کنید\\.",
-
-        // <<<< CHANGE START >>>>
-        // --- General Errors & System Messages ---
         permission_denied: "⛔️ شما اجازه دسترسی به این بخش را ندارید.",
         errorServerNotFound: "⚠️ سرور مورد نظر یافت نشد.",
-        // <<<< CHANGE END >>>>
         
         // --- Language Selection ---
         choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
@@ -59,7 +55,6 @@ const languages = {
         btnAddServer: "➕ افزودن سرور",
         btnRemoveServer: "➖ حذف سرور",
         promptAddServerIP: "لطفاً آدرس IP یا دامنه سرور را وارد کنید:",
-        // <<<< CHANGE START >>>>
         rconConnecting: (serverName) => `⏳ در حال اتصال به سرور *${escapeMarkdownV2Internal(serverName)}*...`,
         rconSuccess: (serverName) => `✅ با موفقیت به سرور *${escapeMarkdownV2Internal(serverName)}* متصل شدید\\.\n\nاکنون می‌توانید دستورات RCON را ارسال کنید\\.\nبرای خروج و قطع اتصال، از دستور \`/disconnect\` استفاده کنید\\.`,
         rconFailed: (serverName, error) => `❌ اتصال به سرور *${escapeMarkdownV2Internal(serverName)}* ناموفق بود\\.\n*دلیل:* \`${error}\``,
@@ -67,8 +62,7 @@ const languages = {
         promptDeleteServer: "کدام سرور را می‌خواهید حذف کنید؟",
         confirmDeleteServer: "آیا از حذف این سرور مطمئن هستید؟ این عمل قابل بازگشت نیست.",
         deleteServerSuccess: "✅ سرور با موفقیت حذف شد.",
-        // <<<< CHANGE END >>>>
-
+        
         // --- Account Panel ---
         accountPanelTitle: "🔧 *پنل مدیریت اکانت*\n\nاز گزینه‌های زیر برای مدیریت حساب کاربری خود استفاده کنید:",
         btnReferralInfo: "💎 کسب درآمد و زیرمجموعه‌گیری",
@@ -88,6 +82,20 @@ const languages = {
         registrationSuccess: "✅ ثبت‌نام اولیه شما با موفقیت انجام شد\\!\n\nبرای فعال‌سازی نهایی اکانت خود، کافیست روی دکمه زیر کلیک کرده و پیام آماده شده را ارسال کنید\\.",
         btnFinalizeRegistration: "✅ نهایی کردن ثبت نام (کلیک کنید)",
         errorRegistrationFailed: "❌ متاسفانه در مرحله آخر ثبت‌نام خطایی رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
+
+        // --- Verification ---
+        btnPlayerStats: "📊 آمار بازی من", // افزوده شده
+        btnVerifyAccount: "🔐 اتصال اکانت به بازی", // افزوده شده
+        btnVerifyFromBot: "۱. دریافت کد از ربات", // افزوده شده
+        btnVerifyFromGame: "۲. دریافت کد از بازی", // افزوده شده
+        btnBackToVerifyMenu: "🔙 بازگشت به منوی وریفای", // افزوده شده
+        verifyChooseMethod: "لطفاً روش اتصال اکانت را انتخاب کنید:", // افزوده شده
+        verifyInstructionsBotToGame: (username, code) => `✅ کد شما ساخته شد\\.\n\nنام کاربری شما: \`${username}\`\nکد وریفای: \`${code}\`\n\nلطفاً وارد سرور ماینکرفت شده و دستور زیر را در چت وارد کنید:\n\`/verify ${code}\``, // افزوده شده
+        verifyInstructionsGameToBot: "برای دریافت کد، لطفاً وارد سرور ماینکرفت شده و دستور `/verify` را در چت وارد کنید\\. سپس کد ۶ رقمی که دریافت می‌کنید را در همین چت برای من ارسال کنید\\.", // افزوده شده
+        verificationSuccess: (username) => `✅ احراز هویت شما با موفقیت انجام شد\\!\nاکانت تلگرام شما به اکانت ماینکرفت \`${username}\` متصل شد\\.`, // افزوده شده
+        verificationFailedInvalidCode: "⚠️ کد وارد شده نامعتبر یا منقضی شده است\\.", // افزوده شده
+        verificationFailedMismatch: "❌ این کد وریفای متعلق به اکانت ماینکرفت شما نیست\\.", // افزوده شده
+        verificationFailedError: "❌ خطایی در فرآیند وریفای رخ داد\\. لطفاً با پشتیبانی تماس بگیرید\\.", // افزوده شده
 
         // --- Admin Commands ---
         usageDelCommand: "استفاده صحیح: `/del <UUID>`",
@@ -163,12 +171,8 @@ const languages = {
         greeting_user_approved: "🎉 Welcome to your user panel\\!\n\nYou can manage your account and get your referral link using the button below\\.",
         error_generic: "❌ An error occurred while checking your status\\. Please try again later\\.",
         errorMenu: "An error occurred displaying the menu\\. Please try again\\.",
-        
-        // <<<< CHANGE START >>>>
-        // --- General Errors & System Messages ---
         permission_denied: "⛔️ You are not authorized to access this section.",
         errorServerNotFound: "⚠️ The requested server was not found.",
-        // <<<< CHANGE END >>>>
 
         // --- Language Selection ---
         choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
@@ -205,7 +209,6 @@ const languages = {
         btnAddServer: "➕ Add Server",
         btnRemoveServer: "➖ Remove Server",
         promptAddServerIP: "Please enter the server's IP address or domain:",
-        // <<<< CHANGE START >>>>
         rconConnecting: (serverName) => `⏳ Connecting to *${escapeMarkdownV2Internal(serverName)}*...`,
         rconSuccess: (serverName) => `✅ Successfully connected to *${escapeMarkdownV2Internal(serverName)}*\\.\n\nYou can now send RCON commands\\.\nUse \`/disconnect\` to exit\\.`,
         rconFailed: (serverName, error) => `❌ Failed to connect to *${escapeMarkdownV2Internal(serverName)}*\\.\n*Reason:* \`${error}\``,
@@ -213,7 +216,6 @@ const languages = {
         promptDeleteServer: "Which server do you want to delete?",
         confirmDeleteServer: "Are you sure you want to delete this server? This action cannot be undone.",
         deleteServerSuccess: "✅ Server successfully deleted.",
-        // <<<< CHANGE END >>>>
 
         // --- Account Panel ---
         accountPanelTitle: "🔧 *Account Management Panel*\n\nUse the options below to manage your account:",
@@ -234,6 +236,20 @@ const languages = {
         registrationSuccess: "✅ Your initial registration was successful\\!\n\nTo finalize your account activation, please click the button below and send the prepared message\\.",
         btnFinalizeRegistration: "✅ Finalize Registration (Click Here)",
         errorRegistrationFailed: "❌ Unfortunately, an error occurred during the final step of registration\\. Please try again later\\.",
+
+        // --- Verification ---
+        btnPlayerStats: "📊 My Game Stats", // Added
+        btnVerifyAccount: "🔐 Link Account to Game", // Added
+        btnVerifyFromBot: "1. Get Code from Bot", // Added
+        btnVerifyFromGame: "2. Get Code from Game", // Added
+        btnBackToVerifyMenu: "🔙 Back to Verification Menu", // Added
+        verifyChooseMethod: "Please choose a method to link your account:", // Added
+        verifyInstructionsBotToGame: (username, code) => `✅ Your code has been generated\\.\n\nYour Username: \`${username}\`\nVerification Code: \`${code}\`\n\nPlease log in to the Minecraft server and enter the following command in the chat:\n\`/verify ${code}\``, // Added
+        verifyInstructionsGameToBot: "To get a code, please log in to the Minecraft server and type `/verify` in the chat\\. Then, send the 6-digit code you receive back to me in this chat\\.", // Added
+        verificationSuccess: (username) => `✅ Your identity has been successfully verified\\!\nYour Telegram account is now linked to the Minecraft account \`${username}\`\\.`, // Added
+        verificationFailedInvalidCode: "⚠️ The entered code is invalid or has expired\\.", // Added
+        verificationFailedMismatch: "❌ This verification code does not belong to your Minecraft account\\.", // Added
+        verificationFailedError: "❌ An error occurred during the verification process\\. Please contact support\\.", // Added
 
         // --- Admin Commands ---
         usageDelCommand: "Correct usage: `/del <UUID>`",
