@@ -147,13 +147,13 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
         tail.on('line', (line) => {
-            // --- بخش بهبود یافته: ترتیب if ها تغییر کرده است ---
             const verifyMatch = line.match(/(\w{3,16}) issued server command: \/verify$/);
 
             if (verifyMatch && verifyMatch[1]) {
                 const username = verifyMatch[1];
                 logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
-                verifyHandler.handleStartVerificationFromGame(username, getRconClient());
+                // بخش اصلاح شده: پرانتزها حذف شدند
+                verifyHandler.handleStartVerificationFromGame(username, getRconClient);
             } else if (line.includes('[zAuctionHouseV3')) {
                 handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {
