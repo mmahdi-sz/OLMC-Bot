@@ -96,6 +96,9 @@ const languages = {
         verificationFailedInvalidCode: "⚠️ کد وارد شده نامعتبر یا منقضی شده است\\.", // افزوده شده
         verificationFailedMismatch: "❌ این کد وریفای متعلق به اکانت ماینکرفت شما نیست\\.", // افزوده شده
         verificationFailedError: "❌ خطایی در فرآیند وریفای رخ داد\\. لطفاً با پشتیبانی تماس بگیرید\\.", // افزوده شده
+        // --- بخش جدید اضافه شده برای بهبود ---
+        promptEnterCodeFromGame: "✅ درخواست شما دریافت شد\\! کد ۶ رقمی که در بازی برایت ارسال شد را در همین چت وارد کن\\.",
+        // --- پایان بخش جدید ---
 
         // --- Admin Commands ---
         usageDelCommand: "استفاده صحیح: `/del <UUID>`",
@@ -250,6 +253,9 @@ const languages = {
         verificationFailedInvalidCode: "⚠️ The entered code is invalid or has expired\\.", // Added
         verificationFailedMismatch: "❌ This verification code does not belong to your Minecraft account\\.", // Added
         verificationFailedError: "❌ An error occurred during the verification process\\. Please contact support\\.", // Added
+        // --- بخش جدید اضافه شده برای بهبود ---
+        promptEnterCodeFromGame: "✅ Your request has been received\\! Please enter the 6-digit code you just received in-game into this chat\\.",
+        // --- پایان بخش جدید ---
 
         // --- Admin Commands ---
         usageDelCommand: "Correct usage: `/del <UUID>`",

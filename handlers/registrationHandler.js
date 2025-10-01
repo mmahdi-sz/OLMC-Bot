@@ -132,7 +132,7 @@ async function handleRegistrationWizard(bot, msg, db, appConfig) {
                 logger.warn(MODULE_NAME, `User ${userId} tried to register with a taken username`, { username });
 
                 await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
-                return true;
+                return true;  
             }
 
             state.data.username = username;
@@ -262,9 +262,40 @@ async function handleDeleteRegistration(bot, msg, db, superAdminId) {
     }
 }
 
+// --- بخش جدید اضافه شده برای بهبود ---
+/**
+ * پیام نهایی‌سازی ثبت‌نام را برای کاربری که در وضعیت 'pending' است، دوباره ارسال می‌کند.
+ */
+async function resendFinalizationMessage(bot, userId, db, supportBotUsername) {
+    const userLang = await db.getUserLanguage(userId);
+    const registration = await db.getRegistrationByTelegramId(userId);
+
+    if (registration && registration.status === 'pending' && registration.uuid) {
+        const finalizationUrl = `https://t.me/${supportBotUsername}?text=${registration.uuid}`;
+        const keyboard = {
+            inline_keyboard: [
+                [{
+                    text: getText(userLang, 'btnFinalizeRegistration'),
+                    url: finalizationUrl
+                }]
+            ]
+        };
+        const finalMessage = getText(userLang, 'registrationSuccess');
+        await bot.sendMessage(userId, finalMessage, {
+            reply_markup: keyboard,
+            parse_mode: 'Markdown'
+        });
+    } else {
+        logger.warn(MODULE_NAME, `Could not resend finalization message for user ${userId}. Status is not pending or UUID is missing.`);
+        await bot.sendMessage(userId, getText(userLang, 'error_generic'));
+    }
+}
+// --- پایان بخش جدید ---
+
 module.exports = {
     startRegistration,
     handleRegistrationCallback,
     handleRegistrationWizard,
-    handleDeleteRegistration
+    handleDeleteRegistration,
+    resendFinalizationMessage // --- اکسپورت کردن تابع جدید ---
 };

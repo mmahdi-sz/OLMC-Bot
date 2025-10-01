@@ -78,8 +78,9 @@ async function handleCodeSubmission(userId, code, userLang) {
  * (Game -> Bot flow, initiated by logReader)
  * @param {string} username - The Minecraft username of the player.
  * @param {function} getRconClient - A function to get the active RCON client.
+ * @param {object} bot - The Telegram bot instance.
  */
-async function handleStartVerificationFromGame(username, getRconClient) {
+async function handleStartVerificationFromGame(username, getRconClient, bot) {
     const rcon = getRconClient();
     if (!rcon) {
         logger.warn(MODULE_NAME, `RCON client is not available. Cannot process verification request for ${username}.`);
@@ -87,9 +88,10 @@ async function handleStartVerificationFromGame(username, getRconClient) {
     }
 
     logger.info(MODULE_NAME, `Starting verification from game for player ${username}`);
-    const isRegistered = await db.isUsernameTaken(username);
+    // --- بخش بهبود یافته: استفاده از تابع جدید برای گرفتن اطلاعات کامل کاربر ---
+    const registration = await db.getRegistrationByUsername(username);
 
-    if (!isRegistered) {
+    if (!registration) {
         // بخش اصلاح شده: استفاده از 'minecraft:tell'
         const errorMsg = `minecraft:tell ${username} شما ابتدا باید در ربات تلگرام ثبت نام کنید.`;
         try {
@@ -110,6 +112,24 @@ async function handleStartVerificationFromGame(username, getRconClient) {
         const response = await rcon.send(successMsg);
         logger.success(MODULE_NAME, `Successfully sent verification code ${code} to player ${username} via RCON.`);
         logger.info(MODULE_NAME, "RCON response for success message:", { response });
+
+        // --- بخش اصلی بهبود: ارسال پیام یادآوری در تلگرام ---
+        try {
+            if (bot && registration.telegram_user_id) {
+                const userId = registration.telegram_user_id;
+                const userLang = await db.getUserLanguage(userId);
+                // متن پیام جدید را از i18n درخواست می‌کنیم
+                const promptMessage = getText(userLang, 'promptEnterCodeFromGame');
+                
+                // ارسال پیام به چت خصوصی کاربر
+                await bot.sendMessage(userId, promptMessage);
+                logger.info(MODULE_NAME, `Sent a verification prompt to user ${userId} on Telegram.`);
+            }
+        } catch (telegramError) {
+            logger.error(MODULE_NAME, 'Failed to send prompt message to user on Telegram.', { error: telegramError.message });
+        }
+        // --- پایان بخش بهبود ---
+
     } catch (e) {
         logger.error(MODULE_NAME, "Failed to send verification code via RCON.", { error: e.message });
     }

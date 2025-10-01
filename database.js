@@ -259,6 +259,18 @@ async function isUsernameTaken(username) {
     return rows.length > 0;
 }
 
+// --- بخش جدید اضافه شده برای بهبود ---
+/**
+ * Finds a registration record based on the in-game username.
+ */
+async function getRegistrationByUsername(gameUsername) {
+    const sql = "SELECT telegram_user_id, game_username, status FROM registrations WHERE game_username = ? LIMIT 1";
+    const [rows] = await executeAndLog(sql, [gameUsername]);
+    return rows.length > 0 ? rows[0] : null;
+}
+// --- پایان بخش جدید ---
+
+
 // --- Wizard State Management ---
 async function setWizardState(userId, wizardType, step, data) {
     const sql = `INSERT INTO wizard_states (user_id, wizard_type, step, data) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE wizard_type = VALUES(wizard_type), step = VALUES(step), data = VALUES(data);`;
@@ -348,6 +360,7 @@ const db = {
     updateRankGroupSortOrder,
     addRegistration, deleteRegistration, getRegistrationByUuid, getRegistrationByTelegramId, updateRegistrationStatus,
     isUsernameTaken,
+    getRegistrationByUsername, // --- اکسپورت کردن تابع جدید ---
     setWizardState, getWizardState, deleteWizardState,
     setUserLanguage, getUserLanguage,
     // Verification exports

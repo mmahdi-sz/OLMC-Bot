@@ -152,8 +152,10 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
             if (verifyMatch && verifyMatch[1]) {
                 const username = verifyMatch[1];
                 logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
-                // بخش اصلاح شده: پرانتزها حذف شدند
-                verifyHandler.handleStartVerificationFromGame(username, getRconClient);
+                // --- بخش بهبود یافته ---
+                // نمونه ربات (bot) به عنوان آرگومان سوم پاس داده می‌شود تا ماژول وریفای بتواند پیام ارسال کند.
+                verifyHandler.handleStartVerificationFromGame(username, getRconClient, bot);
+                // --- پایان بخش بهبود یافته ---
             } else if (line.includes('[zAuctionHouseV3')) {
                 handleAuctionLog(line, bot);
             } else if (line.includes('[Not Secure]')) {

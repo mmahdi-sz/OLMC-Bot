@@ -28,7 +28,8 @@ const startCommand = {
     execute: async (bot, msg, match, appConfig, db) => {
         // <<<< CHANGE START >>>>
         // متغیر supportBotUsername برای استفاده‌های آتی از appConfig استخراج می‌شود.
-        const { superAdminId, supportAdminUsername } = appConfig;
+        // متغیر supportBotUsername نیز برای منطق جدید اضافه شد
+        const { superAdminId, supportAdminUsername, supportBotUsername } = appConfig;
         // <<<< CHANGE END >>>>
         const chatId = msg.chat.id;
         const userId = msg.from.id;
@@ -79,7 +80,13 @@ const startCommand = {
                     // منطق برای وضعیت 'pending' ساده‌سازی شد، زیرا کاربر اکنون دکمه مستقیم دارد.
                     if (registration.status === 'pending') {
                         // این پیام برای موارد نادری است که کاربر دکمه را نادیده گرفته و دوباره /start را می‌زند.
-                        responseText = `⏳ ثبت‌نام شما هنوز نهایی نشده است\\. لطفاً به پیامی که در انتهای ثبت‌نام دریافت کردید برگشته و روی دکمه نهایی‌سازی کلیک کنید\\. اگر پیام را پیدا نمی‌کنید، با ادمین \\(@${supportAdminUsername}\\) تماس بگیرید\\.`;
+                        // --- بخش بهبود یافته ---
+                        // به جای ارسال یک پیام متنی، پیام نهایی‌سازی را دوباره برای کاربر ارسال می‌کنیم.
+                        // این کار تضمین می‌کند که کاربر هرگز در این مرحله گیر نمی‌کند.
+                        logger.info('CMD_START', `Resending finalization message for pending user ${userId}.`);
+                        await registrationHandler.resendFinalizationMessage(bot, userId, db, supportBotUsername);
+                        return; // اجرای دستور را در اینجا متوقف می‌کنیم چون پیام لازم ارسال شده است.
+                        // --- پایان بخش بهبود یافته ---
                     } else if (registration.status === 'approved') {
                         responseText = getText(userLang, 'greeting_user_approved');
                         responseKeyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
