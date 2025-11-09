@@ -1,11 +1,7 @@
-/**
- * کاراکترهای خاص برای MarkdownV2 را escape می‌کند.
- * این تابع به صورت داخلی در i18n.js استفاده می‌شود.
- */
+// i18n.js
+
 function escapeMarkdownV2Internal(text) {
     if (typeof text !== 'string') return '';
-    // کاراکترهای رزرو شده در MarkdownV2
-    // [ _ * [ ] ( ) ~ ` > # + - = | { } . ! ]
     return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
 
@@ -15,10 +11,10 @@ const languages = {
         // --- General ---
         greeting_admin: "سلام\\! 👋 برای شروع یکی از گزینه‌ها را انتخاب کن\\.",
         greeting_user_approved: "🎉 به پنل کاربری خود خوش آمدید\\!\n\nاز طریق دکمه زیر می‌توانید اکانت خود را مدیریت کرده و لینک زیرمجموعه‌گیری خود را دریافت کنید\\.",
-        error_generic: "❌ خطایی در بررسی وضعیت شما رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
-        errorMenu: "خطایی در نمایش منو رخ داد\\. لطفاً دوباره تلاش کنید\\.",
-        permission_denied: "⛔️ شما اجازه دسترسی به این بخش را ندارید.",
-        errorServerNotFound: "⚠️ سرور مورد نظر یافت نشد.",
+        error_generic: "❌ متأسفانه خطایی رخ داد\\. لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید\\.",
+        errorMenu: "⚠️ نمایش منو با مشکل مواجه شد\\. لطفاً چند لحظه صبر کرده و دوباره تلاش کنید\\.",
+        permission_denied: "🚫 متأسفانه شما به این بخش دسترسی ندارید\\.\n\nاگر فکر می‌کنید این اشتباه است، لطفاً با مدیریت تماس بگیرید\\.",
+        errorServerNotFound: "🔍 سروری با این مشخصات یافت نشد\\.\n\nلطفاً از منوی مدیریت سرورها مجدداً تلاش کنید\\.",
         
         // --- Language Selection ---
         choose_language_prompt: "لطفا زبان خود را انتخاب کنید\nPlease choose your language",
@@ -55,9 +51,9 @@ const languages = {
         btnAddServer: "➕ افزودن سرور",
         btnRemoveServer: "➖ حذف سرور",
         promptAddServerIP: "لطفاً آدرس IP یا دامنه سرور را وارد کنید:",
-        rconConnecting: (serverName) => `⏳ در حال اتصال به سرور *${escapeMarkdownV2Internal(serverName)}*...`,
-        rconSuccess: (serverName) => `✅ با موفقیت به سرور *${escapeMarkdownV2Internal(serverName)}* متصل شدید\\.\n\nاکنون می‌توانید دستورات RCON را ارسال کنید\\.\nبرای خروج و قطع اتصال، از دستور \`/disconnect\` استفاده کنید\\.`,
-        rconFailed: (serverName, error) => `❌ اتصال به سرور *${escapeMarkdownV2Internal(serverName)}* ناموفق بود\\.\n*دلیل:* \`${error}\``,
+        rconConnecting: (serverName) => `🔄 *در حال اتصال\\.\\.\\.*\n\nلطفاً صبر کنید\\.\\.\\.`,
+        rconSuccess: (serverName) => `✅ *اتصال موفق\\!*\n\nشما الان به سرور *${escapeMarkdownV2Internal(serverName)}* متصل هستید\\.\n\n💡 *راهنما:*\n• دستورات خود را مستقیماً ارسال کنید\n• برای قطع اتصال: \`/disconnect\``,
+        rconFailed: (serverName, error) => `❌ *اتصال ناموفق بود\\!*\n\n*سرور:* ${escapeMarkdownV2Internal(serverName)}\n*دلیل:* \`${error}\`\n\n🔧 لطفاً:\n• اطلاعات سرور را چک کنید\n• از فعال بودن سرور مطمئن شوید`,
         errorNoServersToDelete: "هیچ سروری برای حذف کردن وجود ندارد.",
         promptDeleteServer: "کدام سرور را می‌خواهید حذف کنید؟",
         confirmDeleteServer: "آیا از حذف این سرور مطمئن هستید؟ این عمل قابل بازگشت نیست.",
@@ -69,36 +65,34 @@ const languages = {
         referralInfoMessage: (link) => `💎 *با دعوت از دوستات، هم بازی کن هم درآمد داشته باش\\!*\n\nاین لینک جادویی توئه\\! هر کسی باهاش بیاد تو سرور، تو رو برای همیشه پولدار می‌کنه\\! 😉\n\n*لینک دعوت تو:*\n\`${link}\`\n\\(روی لینک بالا کلیک کن تا کپی بشه\\)\n\n*چطوری؟ اینجوری:*\n\\- هر خریدی که دوستات بکنن، *۲۵ درصدش* مستقیم میره تو جیب تو\\!\n\\- حتی اگه دوستات هم کسی رو دعوت کنن، *۵ درصد* از خرید اونها هم برای توئه\\!\n\nهمین الان لینک رو برای دوستات بفرست و تیم خودت رو بساز\\!`,
 
         // --- Registration ---
-        registrationWelcome: "👋 سلام، به بات ادرلند خوش آمدید\\.\nبرای شروع فرآیند ثبت‌نام در سرور، روی دکمه زیر کلیک کنید\\.",
-        btnStartRegistration: "📝 ثبت نام در سرور",
-        promptEdition: "لطفا نسخه بازی خود را انتخاب کنید:",
-        btnJavaEdition: "☕️ جاوا ادیشن",
-        btnBedrockEdition: "📱 بدراک ادیشن",
-        promptUsername: "✅ نسخه بازی شما ثبت شد\\.\n\nلطفاً نام کاربری دقیق خود را در بازی وارد کنید:",
-        errorInvalidUsername: "⚠️ نام کاربری نامعتبر است\\.\nنام کاربری باید بین ۳ تا ۱۶ کاراکتر باشد و فقط شامل حروف انگلیسی، اعداد و خط زیر \\(\\_\\) باشد\\. لطفاً دوباره تلاش کنید\\.",
+        registrationWelcome: "👋 *سلام و خوش آمدید\\!*\n\nبرای بازی در سرور، لطفاً ابتدا ثبت\\-نام کنید\\.\n\n✨ فقط *چند دقیقه* زمان می‌برد\\!",
+        btnStartRegistration: "🚀 شروع ثبت‌نام",
+        promptEdition: "📦 *انتخاب نسخه بازی*\n\nلطفاً نسخه Minecraft خود را انتخاب کنید:",
+        btnJavaEdition: "☕️ Java Edition",
+        btnBedrockEdition: "📱 Bedrock Edition (موبایل/کنسول)",
+        promptUsername: "✅ عالی\\! نسخه شما ثبت شد\\.\n\n👤 *نام کاربری خود در بازی را وارد کنید:*\n\n⚠️ دقت کنید:\n• فقط حروف انگلیسی، اعداد و \\_\n• بین 3 تا 16 کاراکتر\n• دقیقاً مثل نام کاربری Minecraft شما",
+        errorInvalidUsername: "❌ *نام کاربری نامعتبر است\\!*\n\n✅ نام کاربری باید:\n• بین 3 تا 16 کاراکتر باشد\n• فقط شامل حروف انگلیسی، اعداد و \\_ باشد\n• فاصله نداشته باشد\n\nلطفاً دوباره تلاش کنید\\.",
         errorUsernameTaken: (admin) => `شما مجاز به استفاده از این نام کاربری نیستید زیرا توسط فرد دیگری گرفته شده است\\.\nبه راهنمایی نیاز دارید؟؟؟ به @${admin} پیام بدید`,
-        promptAge: (username) => `✅ نام کاربری "${escapeMarkdownV2Internal(username)}" ثبت شد\\.\n\nلطفا سن خود را وارد کنید\nمانند: \`15\``,
-        errorInvalidAge: "⚠️ سن وارد شده معتبر نیست\\. لطفاً یک عدد بین ۱۰ تا ۷۰ وارد کنید\\.",
-        registrationSuccess: "✅ ثبت‌نام اولیه شما با موفقیت انجام شد\\!\n\nبرای فعال‌سازی نهایی اکانت خود، کافیست روی دکمه زیر کلیک کرده و پیام آماده شده را ارسال کنید\\.",
-        btnFinalizeRegistration: "✅ نهایی کردن ثبت نام (کلیک کنید)",
+        promptAge: (username) => `🎂 *تقریباً تمام شد\\!*\n\nنام کاربری شما: ${escapeMarkdownV2Internal(username)}\n\nلطفاً سن خود را وارد کنید:\n\nمثال: \`15\``,
+        errorInvalidAge: "❌ سن وارد شده معتبر نیست\\.\n\nلطفاً یک عدد بین 10 تا 70 وارد کنید\\.",
+        registrationSuccess: "🎉 *ثبت‌نام شما با موفقیت انجام شد\\!*\n\n📝 برای فعال‌سازی نهایی حساب، روی دکمه زیر کلیک کنید\\.\n\n⏱ این فرآیند فقط چند ثانیه طول می‌کشد\\.",
+        btnFinalizeRegistration: "✅ فعال‌سازی حساب کاربری",
         errorRegistrationFailed: "❌ متاسفانه در مرحله آخر ثبت‌نام خطایی رخ داد\\. لطفاً بعداً دوباره تلاش کنید\\.",
 
         // --- Verification ---
-        btnPlayerStats: "📊 آمار بازی من", // افزوده شده
-        btnVerifyAccount: "🔐 اتصال اکانت به بازی", // افزوده شده
-        btnVerifyFromBot: "۱. دریافت کد از ربات", // افزوده شده
-        btnVerifyFromGame: "۲. دریافت کد از بازی", // افزوده شده
-        btnBackToVerifyMenu: "🔙 بازگشت به منوی وریفای", // افزوده شده
-        verifyChooseMethod: "لطفاً روش اتصال اکانت را انتخاب کنید:", // افزوده شده
-        verifyInstructionsBotToGame: (username, code) => `✅ کد شما ساخته شد\\.\n\nنام کاربری شما: \`${username}\`\nکد وریفای: \`${code}\`\n\nلطفاً وارد سرور ماینکرفت شده و دستور زیر را در چت وارد کنید:\n\`/verify ${code}\``, // افزوده شده
-        verifyInstructionsGameToBot: "برای دریافت کد، لطفاً وارد سرور ماینکرفت شده و دستور `/verify` را در چت وارد کنید\\. سپس کد ۶ رقمی که دریافت می‌کنید را در همین چت برای من ارسال کنید\\.", // افزوده شده
-        verificationSuccess: (username) => `✅ احراز هویت شما با موفقیت انجام شد\\!\nاکانت تلگرام شما به اکانت ماینکرفت \`${username}\` متصل شد\\.`, // افزوده شده
-        verificationFailedInvalidCode: "⚠️ کد وارد شده نامعتبر یا منقضی شده است\\.", // افزوده شده
-        verificationFailedMismatch: "❌ این کد وریفای متعلق به اکانت ماینکرفت شما نیست\\.", // افزوده شده
-        verificationFailedError: "❌ خطایی در فرآیند وریفای رخ داد\\. لطفاً با پشتیبانی تماس بگیرید\\.", // افزوده شده
-        // --- بخش جدید اضافه شده برای بهبود ---
+        btnPlayerStats: "📊 آمار بازی من",
+        btnVerifyAccount: "🔐 اتصال اکانت به بازی",
+        btnVerifyFromBot: "۱. دریافت کد از ربات",
+        btnVerifyFromGame: "۲. دریافت کد از بازی",
+        btnBackToVerifyMenu: "🔙 بازگشت به منوی وریفای",
+        verifyChooseMethod: "لطفاً روش اتصال اکانت را انتخاب کنید:",
+        verifyInstructionsBotToGame: (username, code) => `✅ کد شما ساخته شد\\.\n\nنام کاربری شما: \`${username}\`\nکد وریفای: \`${code}\`\n\nلطفاً وارد سرور ماینکرفت شده و دستور زیر را در چت وارد کنید:\n\`/verify ${code}\``,
+        verifyInstructionsGameToBot: "برای دریافت کد، لطفاً وارد سرور ماینکرفت شده و دستور `/verify` را در چت وارد کنید\\. سپس کد ۶ رقمی که دریافت می‌کنید را در همین چت برای من ارسال کنید\\.",
+        verificationSuccess: (username) => `✅ احراز هویت شما با موفقیت انجام شد\\!\nاکانت تلگرام شما به اکانت ماینکرفت \`${username}\` متصل شد\\.`,
+        verificationFailedInvalidCode: "⚠️ کد وارد شده نامعتبر یا منقضی شده است\\.",
+        verificationFailedMismatch: "❌ این کد وریفای متعلق به اکانت ماینکرفت شما نیست\\.",
+        verificationFailedError: "❌ خطایی در فرآیند وریفای رخ داد\\. لطفاً با پشتیبانی تماس بگیرید\\.",
         promptEnterCodeFromGame: "✅ درخواست شما دریافت شد\\! کد ۶ رقمی که در بازی برایت ارسال شد را در همین چت وارد کن\\.",
-        // --- پایان بخش جدید ---
 
         // --- Admin Commands ---
         usageDelCommand: "استفاده صحیح: `/del <UUID>`",
@@ -113,7 +107,7 @@ const languages = {
         promptServerPort: "عالی\\! حالا پورت سرور را وارد کنید:",
         promptServerPassword: "بسیار خب\\. حالا رمز \\(password\\) سرور RCON را وارد کنید:",
         promptServerName: "و در آخر، چه نامی برای این سرور ذخیره شود؟ \\(این نام باید یکتا باشد\\)",
-        testingConnection: (name) => `⏳ سرور "${escapeMarkdownV2Internal(name)}" ذخیره شد\\. در حال تست اتصال\\.\\.\\.`,
+        testingConnection: (name) => `🔄 *در حال اتصال\\.\\.\\.*\n\nسرور "${escapeMarkdownV2Internal(name)}" ذخیره شد\\. لطفاً صبر کنید\\.\\.\\.`,
         connectionSuccess: "✅ سرور با موفقیت ذخیره و اتصال به آن تست شد\\!",
         errorServerDuplicate: (name) => `⚠️ خطا: سروری با نام "${escapeMarkdownV2Internal(name)}" از قبل وجود دارد\\. لطفاً دوباره تلاش کنید\\.`,
         errorConnectionFailed: "❌ سرور ذخیره شد، اما اتصال به RCON ناموفق بود\\. لطفاً اطلاعات را بررسی کنید\\.",
@@ -212,9 +206,9 @@ const languages = {
         btnAddServer: "➕ Add Server",
         btnRemoveServer: "➖ Remove Server",
         promptAddServerIP: "Please enter the server's IP address or domain:",
-        rconConnecting: (serverName) => `⏳ Connecting to *${escapeMarkdownV2Internal(serverName)}*...`,
-        rconSuccess: (serverName) => `✅ Successfully connected to *${escapeMarkdownV2Internal(serverName)}*\\.\n\nYou can now send RCON commands\\.\nUse \`/disconnect\` to exit\\.`,
-        rconFailed: (serverName, error) => `❌ Failed to connect to *${escapeMarkdownV2Internal(serverName)}*\\.\n*Reason:* \`${error}\``,
+        rconConnecting: (serverName) => `🔄 *Connecting\\.\\.\\.*\n\nPlease wait\\.\\.\\.`,
+        rconSuccess: (serverName) => `✅ *Connection Successful\\!*\n\nYou are now connected to *${escapeMarkdownV2Internal(serverName)}*\\.\n\n💡 *Tip:*\n• Send your commands directly\n• Use \`/disconnect\` to exit\\.`,
+        rconFailed: (serverName, error) => `❌ *Connection Failed\\!*\n\n*Server:* ${escapeMarkdownV2Internal(serverName)}\n*Reason:* \`${error}\`\n\n🔧 Please:\n• Check your server details\n• Ensure the server is online`,
         errorNoServersToDelete: "There are no servers to delete.",
         promptDeleteServer: "Which server do you want to delete?",
         confirmDeleteServer: "Are you sure you want to delete this server? This action cannot be undone.",
@@ -226,36 +220,34 @@ const languages = {
         referralInfoMessage: (link) => `💎 *Play and earn by inviting your friends\\!*\n\nThis is your magic link\\! Anyone who joins the server with it will make you rich forever\\! 😉\n\n*Your invite link:*\n\`${link}\`\n\\(Click the link above to copy it\\)\n\n*How does it work? Like this:*\n\\- For every purchase your friends make, *25%* of it goes directly into your pocket\\!\n\\- Even if your friends invite someone, you get *5%* of their purchases too\\!\n\nSend this link to your friends right now and build your team\\!`,
 
         // --- Registration ---
-        registrationWelcome: "👋 Welcome to the Otherland bot\\.\nClick the button below to start the registration process for the server\\.",
-        btnStartRegistration: "📝 Register on the Server",
-        promptEdition: "Please select your game edition:",
+        registrationWelcome: "👋 *Welcome to the Otherland bot\\!*\n\nTo play on the server, please register first\\.\n\n✨ It only takes *a few minutes*\\!",
+        btnStartRegistration: "🚀 Start Registration",
+        promptEdition: "📦 *Select Game Edition*\n\nPlease select your Minecraft edition:",
         btnJavaEdition: "☕️ Java Edition",
-        btnBedrockEdition: "📱 Bedrock Edition",
-        promptUsername: "✅ Your game edition has been saved\\.\n\nPlease enter your exact in\\-game username:",
-        errorInvalidUsername: "⚠️ Invalid username\\.\nThe username must be between 3 and 16 characters and can only contain English letters, numbers, and underscores \\(\\_\\)\\. Please try again\\.",
+        btnBedrockEdition: "📱 Bedrock Edition (Mobile/Console)",
+        promptUsername: "✅ Great\\! Your edition has been saved\\.\n\n👤 *Enter your exact in\\-game username:*\n\n⚠️ Note:\n• Only English letters, numbers, and \\_\n• Between 3 and 16 characters\n• Exactly as your Minecraft username",
+        errorInvalidUsername: "❌ *Invalid Username\\!*\n\n✅ Username must be:\n• Between 3 and 16 characters\n• Contain only English letters, numbers, and \\_\n• Have no spaces\n\nPlease try again\\.",
         errorUsernameTaken: (admin) => `You are not allowed to use this username because it has been taken by someone else\\.\nNeed help? Message @${admin}`,
-        promptAge: (username) => `✅ Username "${escapeMarkdownV2Internal(username)}" has been saved\\.\n\nPlease enter your age\nExample: \`15\``,
-        errorInvalidAge: "⚠️ The entered age is not valid\\. Please enter a number between 10 and 70\\.",
-        registrationSuccess: "✅ Your initial registration was successful\\!\n\nTo finalize your account activation, please click the button below and send the prepared message\\.",
-        btnFinalizeRegistration: "✅ Finalize Registration (Click Here)",
+        promptAge: (username) => `🎂 *Almost Done\\!*\n\nYour Username: ${escapeMarkdownV2Internal(username)}\n\nPlease enter your age:\n\nExample: \`15\``,
+        errorInvalidAge: "❌ The entered age is not valid\\. Please enter a number between 10 and 70\\.",
+        registrationSuccess: "🎉 *Your registration was successful\\!*\n\n📝 To finalize account activation, click the button below\\.\n\n⏱ This process only takes a few seconds\\.",
+        btnFinalizeRegistration: "✅ Activate Account",
         errorRegistrationFailed: "❌ Unfortunately, an error occurred during the final step of registration\\. Please try again later\\.",
 
         // --- Verification ---
-        btnPlayerStats: "📊 My Game Stats", // Added
-        btnVerifyAccount: "🔐 Link Account to Game", // Added
-        btnVerifyFromBot: "1. Get Code from Bot", // Added
-        btnVerifyFromGame: "2. Get Code from Game", // Added
-        btnBackToVerifyMenu: "🔙 Back to Verification Menu", // Added
-        verifyChooseMethod: "Please choose a method to link your account:", // Added
-        verifyInstructionsBotToGame: (username, code) => `✅ Your code has been generated\\.\n\nYour Username: \`${username}\`\nVerification Code: \`${code}\`\n\nPlease log in to the Minecraft server and enter the following command in the chat:\n\`/verify ${code}\``, // Added
-        verifyInstructionsGameToBot: "To get a code, please log in to the Minecraft server and type `/verify` in the chat\\. Then, send the 6-digit code you receive back to me in this chat\\.", // Added
-        verificationSuccess: (username) => `✅ Your identity has been successfully verified\\!\nYour Telegram account is now linked to the Minecraft account \`${username}\`\\.`, // Added
-        verificationFailedInvalidCode: "⚠️ The entered code is invalid or has expired\\.", // Added
-        verificationFailedMismatch: "❌ This verification code does not belong to your Minecraft account\\.", // Added
-        verificationFailedError: "❌ An error occurred during the verification process\\. Please contact support\\.", // Added
-        // --- بخش جدید اضافه شده برای بهبود ---
+        btnPlayerStats: "📊 My Game Stats",
+        btnVerifyAccount: "🔐 Link Account to Game",
+        btnVerifyFromBot: "1. Get Code from Bot",
+        btnVerifyFromGame: "2. Get Code from Game",
+        btnBackToVerifyMenu: "🔙 Back to Verification Menu",
+        verifyChooseMethod: "Please choose a method to link your account:",
+        verifyInstructionsBotToGame: (username, code) => `✅ Your code has been generated\\.\n\nYour Username: \`${username}\`\nVerification Code: \`${code}\`\n\nPlease log in to the Minecraft server and enter the following command in the chat:\n\`/verify ${code}\``,
+        verifyInstructionsGameToBot: "To get a code, please log in to the Minecraft server and type `/verify` in the chat\\. Then, send the 6-digit code you receive back to me in this chat\\.",
+        verificationSuccess: (username) => `✅ Your identity has been successfully verified\\!\nYour Telegram account is now linked to the Minecraft account \`${username}\`\\.`,
+        verificationFailedInvalidCode: "⚠️ The entered code is invalid or has expired\\.",
+        verificationFailedMismatch: "❌ This verification code does not belong to your Minecraft account\\.",
+        verificationFailedError: "❌ An error occurred during the verification process\\. Please contact support\\.",
         promptEnterCodeFromGame: "✅ Your request has been received\\! Please enter the 6-digit code you just received in-game into this chat\\.",
-        // --- پایان بخش جدید ---
 
         // --- Admin Commands ---
         usageDelCommand: "Correct usage: `/del <UUID>`",
@@ -270,7 +262,7 @@ const languages = {
         promptServerPort: "Great\\! Now enter the server port:",
         promptServerPassword: "Alright\\. Now enter the RCON server password:",
         promptServerName: "Finally, what name should this server be saved as? \\(This name must be unique\\)",
-        testingConnection: (name) => `⏳ Server "${escapeMarkdownV2Internal(name)}" saved\\. Testing connection\\.\\.\\.`,
+        testingConnection: (name) => `🔄 *Connecting\\.\\.\\.*\n\nServer "${escapeMarkdownV2Internal(name)}" saved\\. Please wait\\.\\.\\.`,
         connectionSuccess: "✅ Server successfully saved and connection tested\\!",
         errorServerDuplicate: (name) => `⚠️ Error: A server with the name "${escapeMarkdownV2Internal(name)}" already exists\\. Please try again\\.`,
         errorConnectionFailed: "❌ Server was saved, but the RCON connection failed\\. Please check the information\\.",
@@ -327,15 +319,11 @@ const languages = {
     }
 };
 
-/**
- * Retrieves a translated text string.
- */
 function getText(userLang, key, ...args) {
     const lang = (userLang && languages[userLang]) ? userLang : 'fa';
     const template = languages[lang][key];
 
     if (template === undefined) {
-        // Fallback for safety, returns the key itself.
         console.warn(`[i18n] Missing translation for key: ${key} in language: ${lang}`);
         return key;
     }

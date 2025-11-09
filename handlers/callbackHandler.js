@@ -6,15 +6,12 @@ const db = require('../database.js');
 const logger = require('../logger.js');
 const { getText } = require('../i18n.js');
 const registrationHandler = require('./registrationHandler.js');
-const verifyHandler = require('../verify.js'); // بخش افزوده شده
+const verifyHandler = require('../verify.js');
 
 const MODULE_NAME = 'CALLBACK_HANDLER';
 
-/**
- * Helper function to send a "permission denied" alert.
- */
 function answerPermissionDenied(bot, callbackQueryId, userLang) {
-    const alertText = getText(userLang, 'permission_denied', "شما اجازه دسترسی ندارید.");
+    const alertText = getText(userLang, 'permission_denied');
     return bot.answerCallbackQuery(callbackQueryId, { text: alertText, show_alert: true });
 }
 
@@ -30,7 +27,7 @@ async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
     };
     try {
         await bot.editMessageText(getText(userLang, 'adminPanelTitle'), {
-            chat_id: chatId, message_id: messageId, reply_markup: keyboard
+            chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2'
         });
     } catch (error) {
         if (!error.message.includes('message is not modified')) {
@@ -43,7 +40,6 @@ async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
 async function showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang = 'fa') {
     const { message: { chat: { id: chatId }, message_id: messageId }, from: { id: userId } } = callbackQuery;
     try {
-        // حل باگ: ادمین‌های عادی باید سرورهای سوپرادمین را ببینند
         const ownerId = isSuperAdmin ? userId : appConfig.superAdminId;
         const userServers = await db.getServers(ownerId);
         
@@ -67,7 +63,6 @@ async function showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, u
         }
     }
 }
-// <<<< پایان بخش بهبود یافته >>>>
 
 async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCron, startCommandHandler) {
     const { data: action, message: msg, from: { id: userId } } = callbackQuery;
@@ -110,26 +105,22 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return startCommandHandler(bot, updatedMsg, ['/start'], appConfig, db);
         }
         
-        // --- بخش بهبود یافته: منوی مدیریت اکانت ---
         if (action === 'manage_account') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const message = getText(userLang, 'accountPanelTitle');
             
-            // بررسی وضعیت وریفای کاربر
             const isVerified = await db.getVerificationStatus(userId);
             let infoButton;
 
             if (isVerified) {
-                // اگر وریفای شده، دکمه آمار را نشان بده
                 infoButton = { text: getText(userLang, 'btnPlayerStats'), callback_data: 'show_player_stats' };
             } else {
-                // اگر وریفای نشده، دکمه وریفای را نشان بده
                 infoButton = { text: getText(userLang, 'btnVerifyAccount'), callback_data: 'start_verification' };
             }
 
             const keyboard = { inline_keyboard: [
                 [{ text: getText(userLang, 'btnReferralInfo'), callback_data: 'show_referral_info' }],
-                [infoButton], // دکمه شرطی اینجا قرار می‌گیرد
+                [infoButton],
                 [{ text: getText(userLang, 'btnBack'), callback_data: 'user_start_menu' }]
             ]};
             return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
@@ -150,7 +141,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
         }
 
-        // --- بخش افزوده شده: مدیریت منوی وریفای ---
         if (action === 'start_verification') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const message = getText(userLang, 'verifyChooseMethod');
@@ -202,21 +192,22 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             }
 
             await db.setWizardState(userId, 'rcon_command', 'awaiting_command', { serverId: server.id, serverName: server.name });
-            const connectingMsg = await bot.editMessageText(`⏳ در حال اتصال به سرور *${server.name}*...`, {
-                chat_id: chatId, message_id: messageId, parse_mode: 'Markdown'
+            
+            const connectingMsg = await bot.editMessageText(getText(userLang, 'rconConnecting', server.name), {
+                chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2'
             });
             
             try {
                 const rcon = new Rcon({ host: server.ip, port: parseInt(server.port, 10), password: server.password });
                 await rcon.connect();
                 await rcon.end();
-                await bot.editMessageText(`✅ با موفقیت به سرور *${server.name}* متصل شدید.\n\nاکنون می‌توانید دستورات RCON را ارسال کنید.\nبرای خروج و قطع اتصال، از دستور /disconnect استفاده کنید.`, {
-                    chat_id: chatId, message_id: connectingMsg.message_id, parse_mode: 'Markdown'
+                await bot.editMessageText(getText(userLang, 'rconSuccess', server.name), {
+                    chat_id: chatId, message_id: connectingMsg.message_id, parse_mode: 'MarkdownV2'
                 });
             } catch(e) {
                 await db.deleteWizardState(userId);
-                await bot.editMessageText(`❌ اتصال به سرور *${server.name}* ناموفق بود. لطفاً اطلاعات سرور را بررسی کنید.`, {
-                    chat_id: chatId, message_id: connectingMsg.message_id, parse_mode: 'Markdown'
+                await bot.editMessageText(getText(userLang, 'rconFailed', server.name, e.message), {
+                    chat_id: chatId, message_id: connectingMsg.message_id, parse_mode: 'MarkdownV2'
                 });
                 return showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang);
             }
@@ -252,7 +243,7 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         }
 
         if (action.startsWith('remove_admin_')) {
-            // ... (منطق این بخش بدون تغییر باقی می‌ماند)
+            
         }
         
         if (action === 'add_server') {
@@ -282,7 +273,7 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             }
             
             if (stage === 'execute') {
-                await db.deleteServerById(parseInt(serverId, 10)); // فرض می‌کنیم تابعی با این نام در db.js وجود دارد
+                await db.deleteServerById(parseInt(serverId, 10)); 
                 logger.success(MODULE_NAME, `Server ${serverId} removed by ${userId}.`);
                 await bot.answerCallbackQuery(callbackQuery.id, { text: 'سرور با موفقیت حذف شد.' });
                 return showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang);
@@ -298,4 +289,4 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
     }
 }
 
-module.exports = { handleCallback };
+module.exports = { handleCallback, showServerMenu, showAdminPanel };

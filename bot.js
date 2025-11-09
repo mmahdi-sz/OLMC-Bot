@@ -43,8 +43,7 @@ async function main() {
 
     loadCommands(bot, appConfig);
 
-    // Initialize background services
-    startLogReader(bot, db, getRconClient); // بخش بهبود یافته
+    startLogReader(bot, db, getRconClient); 
     startServerMonitor(bot, db, getRconClient); 
 
     let rankListCronJob = null;
@@ -71,14 +70,12 @@ async function main() {
     });
 
     bot.on('message', async (msg) => {
-        // Ignore non-text messages or messages that are commands
         if (!msg.text || msg.text.startsWith('/')) return;
 
         const isWizardHandled = await wizardHandler.handleWizardSteps(bot, msg, db, appConfig.superAdminId) ||
                                   await registrationHandler.handleRegistrationWizard(bot, msg, db, appConfig);
         if (isWizardHandled) return;
 
-        // Handle verification code submissions
         if (msg.chat.type === 'private' && /^\d{6}$/.test(msg.text.trim())) {
             const code = msg.text.trim();
             const userId = msg.from.id;
@@ -87,20 +84,31 @@ async function main() {
             const result = await verifyHandler.handleCodeSubmission(userId, code, userLang);
             await bot.sendMessage(userId, result.message, { parse_mode: 'Markdown' });
             
-            return; // Stop further processing for this message
+            return; 
         }
         
-        // Chat Bridge Logic
         if (msg.chat.id === appConfig.mainGroupId && msg.message_thread_id === appConfig.topicIds.chat) {
             return handleChatMessage(bot, msg, db, appConfig, getRconClient());
         }
 
-        // Auto-delete non-admin messages in restricted topics
-        if (msg.is_topic_message && msg.chat.id === appConfig.mainGroupId && msg.message_thread_id !== appConfig.topicIds.chat) {
-            const isSuperAdmin = msg.from.id === appConfig.superAdminId;
-            const isRegularAdmin = await db.isAdmin(msg.from.id);
+        if (msg.is_topic_message && msg.chat.id === appConfig.mainGroupId) {
+            const userId = msg.from.id;
+            const topicId = msg.message_thread_id;
+            
+            if (topicId === appConfig.topicIds.chat) {
+                return;
+            }
+            
+            const isSuperAdmin = userId === appConfig.superAdminId;
+            const isRegularAdmin = await db.isAdmin(userId);
+            
             if (!isSuperAdmin && !isRegularAdmin) {
-                bot.deleteMessage(msg.chat.id, msg.message_id).catch(() => {});
+                try {
+                    await bot.deleteMessage(msg.chat.id, msg.message_id);
+                    logger.info('MESSAGE_FILTER', `Deleted unauthorized message in topic ${topicId}`, { userId });
+                } catch (error) {
+                    logger.error('MESSAGE_FILTER', 'Failed to delete unauthorized message', { error: error.message });
+                }
             }
         }
     });

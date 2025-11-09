@@ -6,6 +6,8 @@ const { getText } = require('../i18n.js');
 
 const MODULE_NAME = 'REGISTRATION_HANDLER';
 
+const registrationLocks = new Map();
+
 const WIZARD_STEPS = {
     AWAITING_EDITION: 'awaiting_edition',
     AWAITING_USERNAME: 'awaiting_username',
@@ -13,14 +15,7 @@ const WIZARD_STEPS = {
 };
 
 const MINECRAFT_USERNAME_REGEX = /^[a-zA-Z0-9_]{3,16}$/;
-// <<<< CHANGE START >>>>
-// متغیر ثابت حذف شد. این مقدار از appConfig خوانده خواهد شد.
-// const SUPPORT_ADMIN_USERNAME = process.env.SUPPORT_ADMIN_USERNAME || 'otherland_admin';
-// <<<< CHANGE END >>>>
 
-/**
- * نقطه شروع برای فرآیند ثبت‌نام کاربر.
- */
 async function startRegistration(bot, msg, referrerId = null, db) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -40,9 +35,6 @@ async function startRegistration(bot, msg, referrerId = null, db) {
     await bot.sendMessage(chatId, message, { reply_markup: keyboard });
 }
 
-/**
- * مدیریت کلیک روی دکمه‌های شیشه‌ای در فرآیند ثبت‌نام.
- */
 async function handleRegistrationCallback(bot, callbackQuery, db) {
     const action = callbackQuery.data;
     const msg = callbackQuery.message;
@@ -100,16 +92,15 @@ async function handleRegistrationCallback(bot, callbackQuery, db) {
     }
 }
 
-/**
- * مدیریت پیام‌های متنی کاربر در طول ویزارد ثبت‌نام.
- */
-// <<<< CHANGE START >>>>
-// پارامتر appConfig برای دسترسی به تنظیمات سراسری اضافه شد
 async function handleRegistrationWizard(bot, msg, db, appConfig) { 
-// <<<< CHANGE END >>>>
     const userId = msg.from.id;
     const chatId = msg.chat.id;
     const text = msg.text || '';
+
+    if (registrationLocks.has(userId)) {
+        logger.debug(MODULE_NAME, `User ${userId} has an active registration being processed.`);
+        return true;
+    }
 
     const state = await db.getWizardState(userId);
     if (!state || state.wizard_type !== 'registration') {
@@ -117,123 +108,116 @@ async function handleRegistrationWizard(bot, msg, db, appConfig) {
     }
     
     const userLang = state.data.lang || 'fa';
+    registrationLocks.set(userId, true);
 
-    switch (state.step) {
-        case WIZARD_STEPS.AWAITING_USERNAME:
-            const username = text.trim();
-            if (!MINECRAFT_USERNAME_REGEX.test(username)) {
-                logger.warn(MODULE_NAME, `User ${userId} provided invalid username`, { username });
-                await bot.sendMessage(chatId, getText(userLang, 'errorInvalidUsername'));
-                return true;
-            }
-
-            const isTaken = await db.isUsernameTaken(username);
-            if (isTaken) {
-                logger.warn(MODULE_NAME, `User ${userId} tried to register with a taken username`, { username });
-
-                await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
-                return true;  
-            }
-
-            state.data.username = username;
-            logger.debug(MODULE_NAME, `User ${userId} provided username`, { username });
-            await db.setWizardState(userId, 'registration', WIZARD_STEPS.AWAITING_AGE, state.data);
-            
-            await bot.sendMessage(chatId, getText(userLang, 'promptAge', username), { parse_mode: 'Markdown' });
-            break;
-
-        case WIZARD_STEPS.AWAITING_AGE:
-            const ageText = text.trim().replace(/[\u0660-\u0669]/g, c => c.charCodeAt(0) - 0x0660);
-            const age = parseInt(ageText, 10);
-
-            if (isNaN(age) || age < 10 || age > 70) {
-                logger.warn(MODULE_NAME, `User ${userId} provided invalid age`, { ageText });
-                await bot.sendMessage(chatId, getText(userLang, 'errorInvalidAge'));
-                return true;
-            }
-
-            state.data.age = age;
-            logger.debug(MODULE_NAME, `User ${userId} provided age`, { age });
-            
-            try {
-                const uuid = crypto.randomBytes(8).toString('hex').toUpperCase();
-                let finalUsername = state.data.username;
-
-                if (state.data.edition === 'bedrock') {
-                    finalUsername = finalUsername.replace(/\s/g, '_');
-                    if (!finalUsername.startsWith('_')) {
-                         finalUsername = `_${finalUsername}`;
-                    }
+    try {
+        switch (state.step) {
+            case WIZARD_STEPS.AWAITING_USERNAME:
+                const username = text.trim();
+                if (!MINECRAFT_USERNAME_REGEX.test(username)) {
+                    logger.warn(MODULE_NAME, `User ${userId} provided invalid username`, { username });
+                    await bot.sendMessage(chatId, getText(userLang, 'errorInvalidUsername'));
+                    return true;
                 }
+
+                const isTaken = await db.isUsernameTaken(username);
+                if (isTaken) {
+                    logger.warn(MODULE_NAME, `User ${userId} tried to register with a taken username`, { username });
+
+                    await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
+                    return true;  
+                }
+
+                state.data.username = username;
+                logger.debug(MODULE_NAME, `User ${userId} provided username`, { username });
+                await db.setWizardState(userId, 'registration', WIZARD_STEPS.AWAITING_AGE, state.data);
                 
-                const registrationData = {
-                    telegram_user_id: userId,
-                    game_edition: state.data.edition,
-                    game_username: finalUsername,
-                    age: state.data.age,
-                    uuid: uuid,
-                    referrer_telegram_id: state.data.referrerId || null
-                };
+                await bot.sendMessage(chatId, getText(userLang, 'promptAge', username), { parse_mode: 'Markdown' });
+                break;
+
+            case WIZARD_STEPS.AWAITING_AGE:
+                const ageText = text.trim().replace(/[\u0660-\u0669]/g, c => c.charCodeAt(0) - 0x0660);
+                const age = parseInt(ageText, 10);
+
+                if (isNaN(age) || age < 10 || age > 70) {
+                    logger.warn(MODULE_NAME, `User ${userId} provided invalid age`, { ageText });
+                    await bot.sendMessage(chatId, getText(userLang, 'errorInvalidAge'));
+                    return true;
+                }
+
+                state.data.age = age;
+                logger.debug(MODULE_NAME, `User ${userId} provided age`, { age });
                 
-                // زبان کاربر دیگر در این جدول ذخیره نمی‌شود و به جدول user_settings منتقل شده است
-                // language_code: userLang
+                try {
+                    const uuid = crypto.randomBytes(8).toString('hex').toUpperCase();
+                    let finalUsername = state.data.username;
 
-                await db.addRegistration(registrationData);
-                logger.success(MODULE_NAME, `User ${userId} successfully registered`, { data: registrationData });
+                    if (state.data.edition === 'bedrock') {
+                        finalUsername = finalUsername.replace(/\s/g, '_');
+                        if (!finalUsername.startsWith('_')) {
+                             finalUsername = `_${finalUsername}`;
+                        }
+                    }
+                    
+                    const stillAvailable = !(await db.isUsernameTaken(finalUsername));
+                    if (!stillAvailable) {
+                        await bot.sendMessage(chatId, getText(userLang, 'errorUsernameTaken', appConfig.supportAdminUsername));
+                        await db.deleteWizardState(userId);
+                        return true;
+                    }
+                    
+                    const registrationData = {
+                        telegram_user_id: userId,
+                        game_edition: state.data.edition,
+                        game_username: finalUsername,
+                        age: state.data.age,
+                        uuid: uuid,
+                        referrer_telegram_id: state.data.referrerId || null
+                    };
 
-                // <<<< CHANGE START >>>>
-                // --- منطق جدید برای ارسال دکمه شیشه‌ای ---
+                    await db.addRegistration(registrationData);
+                    logger.success(MODULE_NAME, `User ${userId} successfully registered`, { data: registrationData });
 
-                // 1. ساخت لینک هوشمند با استفاده از نام کاربری یوزربات از appConfig
-                const finalizationUrl = `https://t.me/${appConfig.supportBotUsername}?text=${uuid}`;
+                    const finalizationUrl = `https://t.me/${appConfig.supportBotUsername}?text=${uuid}`;
 
-                // 2. ساخت دکمه شیشه‌ای با متنی که از i18n خوانده می‌شود
-                const keyboard = {
-                    inline_keyboard: [
-                        [
-                            { 
-                                text: getText(userLang, 'btnFinalizeRegistration'), 
-                                url: finalizationUrl 
-                            }
+                    const keyboard = {
+                        inline_keyboard: [
+                            [
+                                { 
+                                    text: getText(userLang, 'btnFinalizeRegistration'), 
+                                    url: finalizationUrl 
+                                }
+                            ]
                         ]
-                    ]
-                };
+                    };
 
-                // 3. دریافت پیام راهنمای جدید از i18n
-                const finalMessage = getText(userLang, 'registrationSuccess');
-                
-                // 4. ارسال پیام نهایی به همراه دکمه
-                await bot.sendMessage(chatId, finalMessage, { 
-                    reply_markup: keyboard,
-                    parse_mode: 'Markdown' // یا MarkdownV2 بسته به نیاز متن
-                });
+                    const finalMessage = getText(userLang, 'registrationSuccess');
+                    
+                    await bot.sendMessage(chatId, finalMessage, { 
+                        reply_markup: keyboard,
+                        parse_mode: 'Markdown' 
+                    });
 
-                // --- کد قدیمی حذف شد ---
-                // const finalMessage = getText(userLang, 'registrationSuccess', appConfig.supportAdminUsername);
-                // await bot.sendMessage(chatId, finalMessage, { parse_mode: 'MarkdownV2' });
-                // await bot.sendMessage(chatId, `\`${uuid}\``, { parse_mode: 'Markdown' });
-
-                // <<<< CHANGE END >>>>
-
-            } catch (error) {
-                logger.error(MODULE_NAME, `DATABASE ERROR during registration for user ${userId}`, { 
-                    errorMessage: error.message, 
-                    errorCode: error.code,
-                    stack: error.stack 
-                });
-                await bot.sendMessage(chatId, getText(userLang, 'errorRegistrationFailed'));
-            } finally {
-                await db.deleteWizardState(userId);
-                logger.debug(MODULE_NAME, `Wizard state for user ${userId} has been cleared.`);
-            }
-            break;
+                } catch (error) {
+                    logger.error(MODULE_NAME, `DATABASE ERROR during registration for user ${userId}`, { 
+                        errorMessage: error.message, 
+                        errorCode: error.code,
+                        stack: error.stack 
+                    });
+                    await bot.sendMessage(chatId, getText(userLang, 'errorRegistrationFailed'));
+                } finally {
+                    await db.deleteWizardState(userId);
+                    logger.debug(MODULE_NAME, `Wizard state for user ${userId} has been cleared.`);
+                }
+                break;
+        }
+    } finally {
+        registrationLocks.delete(userId);
     }
+    
     return true;
 }
 
-/**
- * مدیریت دستور حذف یک درخواست ثبت‌نام توسط سوپر ادمین.
- */
 async function handleDeleteRegistration(bot, msg, db, superAdminId) {
     const requesterId = msg.from.id;
     if (requesterId !== superAdminId) return;
@@ -262,10 +246,6 @@ async function handleDeleteRegistration(bot, msg, db, superAdminId) {
     }
 }
 
-// --- بخش جدید اضافه شده برای بهبود ---
-/**
- * پیام نهایی‌سازی ثبت‌نام را برای کاربری که در وضعیت 'pending' است، دوباره ارسال می‌کند.
- */
 async function resendFinalizationMessage(bot, userId, db, supportBotUsername) {
     const userLang = await db.getUserLanguage(userId);
     const registration = await db.getRegistrationByTelegramId(userId);
@@ -290,12 +270,11 @@ async function resendFinalizationMessage(bot, userId, db, supportBotUsername) {
         await bot.sendMessage(userId, getText(userLang, 'error_generic'));
     }
 }
-// --- پایان بخش جدید ---
 
 module.exports = {
     startRegistration,
     handleRegistrationCallback,
     handleRegistrationWizard,
     handleDeleteRegistration,
-    resendFinalizationMessage // --- اکسپورت کردن تابع جدید ---
+    resendFinalizationMessage
 };

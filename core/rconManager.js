@@ -5,22 +5,24 @@ const logger = require('../logger');
 
 let rconClient = null;
 let reconnectTimer = null;
-let stopRetrying = false; // فلگ برای متوقف کردن تلاش‌های اتصال در صورت بروز خطای دائمی
+let stopRetrying = false;
 
-/**
- * اتصال پایدار به RCON را برقرار کرده و مدیریت می‌کند.
- * این تابع به صورت هوشمند خطاهای دائمی (مانند رمز عبور اشتباه) را از خطاهای موقت (مانند ری‌استارت سرور) تشخیص می‌دهد.
- *
- * @param {object} rconConfig - تنظیمات اتصال (host, port, password, reconnectDelay).
- * @param {function} onStateChange - یک تابع callback که در زمان تغییر وضعیت اتصال (آنلاین/آفلاین) فراخوانی می‌شود. این تابع rconClient یا null را به عنوان ورودی می‌گیرد.
- * @param {object} bot - نمونه (instance) ربات تلگرام برای ارسال هشدار به ادمین.
- * @param {number} superAdminId - شناسه سوپرادمین برای دریافت هشدارهای حیاتی.
- */
 function connectRcon(rconConfig, onStateChange, bot, superAdminId) {
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
+        reconnectTimer = null;
     }
-    stopRetrying = false; // ریست کردن وضعیت در هر بار فراخوانی
+    
+    if (rconClient) {
+        try {
+            rconClient.end();
+        } catch (e) {
+            logger.warn('RCON_MANAGER', 'Error closing previous connection', { error: e.message });
+        }
+        rconClient = null;
+    }
+    
+    stopRetrying = false;
 
     const { host, port, password, reconnectDelay } = rconConfig;
 
@@ -60,9 +62,8 @@ function connectRcon(rconConfig, onStateChange, bot, superAdminId) {
             rconClient = null;
             if (onStateChange) onStateChange(null);
 
-            // <<<< بخش کلیدی: تشخیص نوع خطا >>>>
             if (error.message && error.message.toLowerCase().includes('login failed')) {
-                stopRetrying = true; // <<<< جلوی تلاش‌های بعدی را بگیر
+                stopRetrying = true;
                 logger.error('RCON_MANAGER', 'خطای حیاتی: احراز هویت RCON ناموفق بود. تلاش برای اتصال مجدد متوقف شد.');
 
                 if (bot && superAdminId) {
@@ -71,8 +72,9 @@ function connectRcon(rconConfig, onStateChange, bot, superAdminId) {
                        .catch(e => logger.error('RCON_MANAGER', 'ارسال پیام هشدار RCON به سوپرادمین ناموفق بود.', { error: e.message }));
                 }
             } else {
-                // برای خطاهای دیگر (مثل خاموش بودن سرور)، دوباره تلاش می‌کنیم
-                reconnectTimer = setTimeout(attemptConnection, reconnectDelay);
+                if (!stopRetrying) {
+                    reconnectTimer = setTimeout(attemptConnection, reconnectDelay);
+                }
             }
         }
     };
@@ -80,15 +82,28 @@ function connectRcon(rconConfig, onStateChange, bot, superAdminId) {
     attemptConnection();
 }
 
-/**
- * نمونه (instance) فعال RCON را برمی‌گرداند.
- * @returns {Rcon|null} کلاینت RCON یا null اگر متصل نباشد.
- */
 function getRconClient() {
     return rconClient;
 }
 
+function disconnectRcon() {
+    stopRetrying = true;
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (rconClient) {
+        try {
+            rconClient.end();
+        } catch (e) {
+            logger.error('RCON_MANAGER', 'Error disconnecting RCON', { error: e.message });
+        }
+        rconClient = null;
+    }
+}
+
 module.exports = {
     connectRcon,
-    getRconClient
+    getRconClient,
+    disconnectRcon
 };

@@ -48,7 +48,6 @@ async function initDb() {
         // Registrations Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS registrations (id INT PRIMARY KEY AUTO_INCREMENT, telegram_user_id BIGINT NOT NULL UNIQUE, game_edition VARCHAR(10) NOT NULL, game_username VARCHAR(255) NOT NULL, age INT NOT NULL, uuid VARCHAR(16) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', referrer_telegram_id BIGINT DEFAULT NULL, is_verified BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // --- Migration to add/remove columns safely ---
         try {
             await connection.execute(`ALTER TABLE registrations ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE`);
             logger.info(MODULE_NAME, "Column 'is_verified' successfully added to 'registrations' table.");
@@ -99,12 +98,25 @@ async function initDb() {
     }
 };
 
-async function executeAndLog(sql, params) {
+/**
+ * Executes a SQL query, logs the event, and ensures the connection is released.
+ * @param {string} sql - The SQL query string.
+ * @param {Array<any>} [params=[]] - An array of parameters for the prepared statement.
+ * @returns {Promise<Array<any>>} The result array from the query execution.
+ */
+async function executeAndLog(sql, params = []) {
+    let connection;
     try {
-        return await pool.execute(sql, params);
+        connection = await pool.getConnection();
+        const [result] = await connection.execute(sql, params);
+        return [result];
     } catch (error) {
         logger.error(MODULE_NAME, 'Query execution failed', { sql, params, error: error.message });
         throw error;
+    } finally {
+        if (connection) {
+            connection.release();
+        }
     }
 }
 
@@ -124,6 +136,11 @@ async function getServers(userId) {
 async function deleteServer(userId, serverName) {
     const sql = "DELETE FROM servers WHERE user_id = ? AND name = ?";
     const [result] = await executeAndLog(sql, [userId, serverName]);
+    return result.affectedRows;
+}
+async function deleteServerById(serverId) {
+    const sql = "DELETE FROM servers WHERE id = ?";
+    const [result] = await executeAndLog(sql, [serverId]);
     return result.affectedRows;
 }
 
@@ -223,7 +240,7 @@ async function updatePlayerTemplate(groupName, newPlayerTemplate) {
     return result.affectedRows;
 }
 async function updateRankGroupSortOrder(groupId, direction) {
-    // ... (This function is complex and correct, no changes needed)
+    
 }
 
 // --- Registration Management ---
@@ -290,65 +307,42 @@ async function deleteWizardState(userId) {
 
 // ========== VERIFICATION FUNCTIONS ==========
 
-/**
- * Checks if a user is verified based on their Telegram ID.
- */
 async function getVerificationStatus(telegramUserId) {
     const sql = "SELECT is_verified FROM registrations WHERE telegram_user_id = ? LIMIT 1";
     const [rows] = await executeAndLog(sql, [telegramUserId]);
     return rows.length > 0 ? !!rows[0].is_verified : false;
 }
 
-/**
- * Creates a verification code for a Telegram user. (For Bot -> Game flow)
- */
 async function createVerificationCodeForUser(telegramUserId, code) {
     await executeAndLog("DELETE FROM verification_codes WHERE telegram_user_id = ?", [telegramUserId]);
     const sql = "INSERT INTO verification_codes (telegram_user_id, code) VALUES (?, ?)";
     await executeAndLog(sql, [telegramUserId, code]);
 }
 
-/**
- * Creates a verification code for a Minecraft user. (For Game -> Bot flow)
- */
 async function createVerificationCodeForGameUser(gameUsername, code) {
     await executeAndLog("DELETE FROM verification_codes WHERE game_username = ?", [gameUsername]);
     const sql = "INSERT INTO verification_codes (game_username, code) VALUES (?, ?)";
     await executeAndLog(sql, [gameUsername, code]);
 }
 
-/**
- * Finds a Minecraft username associated with a verification code. (For Game -> Bot flow)
- */
 async function findUsernameByCode(code) {
     const sql = "SELECT game_username FROM verification_codes WHERE code = ? AND game_username IS NOT NULL LIMIT 1";
     const [rows] = await executeAndLog(sql, [code]);
     return rows.length > 0 ? rows[0].game_username : null;
 }
 
-// --- بخش جدید اضافه شده برای بهبود ---
-/**
- * Finds a Telegram user ID associated with a verification code. (For Bot -> Game flow)
- */
 async function findTelegramIdByCode(code) {
     const sql = "SELECT telegram_user_id FROM verification_codes WHERE code = ? AND telegram_user_id IS NOT NULL LIMIT 1";
     const [rows] = await executeAndLog(sql, [code]);
     return rows.length > 0 ? rows[0].telegram_user_id : null;
 }
-// --- پایان بخش جدید ---
 
-/**
- * Sets a user's status to verified.
- */
 async function verifyUser(telegramUserId, gameUsername) {
     const sql = "UPDATE registrations SET is_verified = TRUE WHERE telegram_user_id = ? AND game_username = ?";
     const [result] = await executeAndLog(sql, [telegramUserId, gameUsername]);
     return result.affectedRows > 0;
 }
 
-/**
- * Deletes a verification code after it has been used.
- */
 async function deleteVerificationCode(code) {
     const sql = "DELETE FROM verification_codes WHERE code = ?";
     await executeAndLog(sql, [code]);
@@ -358,7 +352,7 @@ async function deleteVerificationCode(code) {
 // ===== EXPORTS =====
 const db = {
     initDb,
-    addServer, getServers, deleteServer,
+    addServer, getServers, deleteServer, deleteServerById,
     addAdmin, getAdmins, removeAdmin, isAdmin,
     setUserLink, getUserLink,
     getSetting, setSetting, deleteSetting,
@@ -369,12 +363,12 @@ const db = {
     getRegistrationByUsername,
     setWizardState, getWizardState, deleteWizardState,
     setUserLanguage, getUserLanguage,
-    // Verification exports
+    
     getVerificationStatus,
     createVerificationCodeForUser,
     createVerificationCodeForGameUser,
     findUsernameByCode,
-    findTelegramIdByCode, // --- اکسپورت کردن تابع جدید ---
+    findTelegramIdByCode, 
     verifyUser,
     deleteVerificationCode,
 };

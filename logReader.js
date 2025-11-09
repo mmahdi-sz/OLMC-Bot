@@ -6,8 +6,8 @@ const logger = require('./logger.js');
 const verifyHandler = require('./verify.js');
 
 const MODULE_NAME = 'LOG_READER';
+const MAX_LOG_FILE_SIZE = 50 * 1024 * 1024;
 
-// Cache for log reader settings to avoid repeated DB calls.
 let logConfig = {
     mainGroupId: null,
     topicIds: {
@@ -16,7 +16,6 @@ let logConfig = {
     }
 };
 
-// Function to load/reload the configuration from the database.
 async function loadLogReaderConfig(db) {
     logger.info(MODULE_NAME, 'Loading/Reloading log reader configuration...');
     try {
@@ -40,9 +39,6 @@ function escapeHTML(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-/**
- * Processes auction-related log lines.
- */
 async function handleAuctionLog(line, bot) {
     if (!logConfig.mainGroupId || !logConfig.topicIds.auction) return;
 
@@ -80,16 +76,12 @@ async function handleAuctionLog(line, bot) {
     }
 }
 
-/**
- * Processes in-game chat messages.
- */
 async function handleChatLog(line, bot) {
     if (!logConfig.mainGroupId || !logConfig.topicIds.chat) return;
     
     const match = line.match(/\[Not Secure\]\s*([^:]+):\s*(.*)/);
     
     if (!match) {
-        // This is not a standard chat message, which is fine. We just ignore it.
         return;
     }
 
@@ -101,7 +93,7 @@ async function handleChatLog(line, bot) {
     const prefix = senderParts.join(' ');
 
     if (prefix === '[Telegram]') {
-        return; // Ignore messages from the bot itself to prevent loops
+        return;
     }
     
     let messageToSend = originalMessage;
@@ -126,9 +118,6 @@ async function handleChatLog(line, bot) {
     }
 }
 
-/**
- * Watches the log file and dispatches lines to appropriate handlers.
- */
 function watchLogFile(logFilePath, bot, db, getRconClient) {
     logger.info(MODULE_NAME, `Attempting to watch log file at: ${logFilePath}`);
     
@@ -142,28 +131,28 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
         if (!fs.existsSync(logFilePath)) {
             throw new Error(`Log file not found at ${logFilePath}`);
         }
+        
+        const stats = fs.statSync(logFilePath);
+        if (stats.size > MAX_LOG_FILE_SIZE) {
+            logger.warn(MODULE_NAME, `Log file size (${stats.size} bytes) exceeds maximum (${MAX_LOG_FILE_SIZE} bytes). Performance may be affected.`);
+        }
 
         const tail = new Tail(logFilePath, options);
         logger.success(MODULE_NAME, 'Successfully started watching log file.');
 
         tail.on('line', (line) => {
-            // --- بخش بهبود یافته ---
-            // Regex جدید برای تشخیص دستور /verify به همراه کد 6 رقمی
             const verifyWithCodeMatch = line.match(/(\w{3,16}) issued server command: \/verify (\d{6})$/);
-            // Regex قبلی برای تشخیص دستور /verify خالی
             const verifyEmptyMatch = line.match(/(\w{3,16}) issued server command: \/verify$/);
 
             if (verifyWithCodeMatch && verifyWithCodeMatch[1] && verifyWithCodeMatch[2]) {
                 const username = verifyWithCodeMatch[1];
                 const code = verifyWithCodeMatch[2];
                 logger.info(MODULE_NAME, `Verification submission detected from player: ${username} with code ${code}`);
-                // تابع جدیدی که در مرحله بعد خواهیم ساخت را فراخوانی می‌کند
                 verifyHandler.handleVerifyFromGame(username, code, getRconClient);
 
             } else if (verifyEmptyMatch && verifyEmptyMatch[1]) {
                 const username = verifyEmptyMatch[1];
                 logger.info(MODULE_NAME, `Verification request detected for player: ${username}`);
-                // این منطق قبلی برای ارسال کد به بازیکن است و دست‌نخورده باقی می‌ماند
                 verifyHandler.handleStartVerificationFromGame(username, getRconClient, bot);
             
             } else if (line.includes('[zAuctionHouseV3')) {
@@ -171,12 +160,11 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
             } else if (line.includes('[Not Secure]')) {
                 handleChatLog(line, bot);
             }
-            // --- پایان بخش بهبود یافته ---
         });
 
         tail.on('error', (error) => {
             logger.error(MODULE_NAME, 'Error watching log file. Re-watching in 10s...', { error: error.message });
-            try { tail.unwatch(); } catch (e) { /* ignore */ }
+            try { tail.unwatch(); } catch (e) { }
             setTimeout(() => watchLogFile(logFilePath, bot, db, getRconClient), 10000);
         });
 
@@ -186,10 +174,7 @@ function watchLogFile(logFilePath, bot, db, getRconClient) {
     }
 }
 
-/**
- * Initializes the log reader module.
- */
-async function startLogReader(bot, db, getRconClient) {
+function startLogReader(bot, db, getRconClient) {
     const logFilePath = process.env.SERVER_LOG_FILE_PATH;
 
     if (!logFilePath) {
@@ -197,10 +182,9 @@ async function startLogReader(bot, db, getRconClient) {
         return;
     }
 
-    await loadLogReaderConfig(db);
+    loadLogReaderConfig(db);
 
     watchLogFile(logFilePath, bot, db, getRconClient);
 }
 
-// Export the reload function so it can be called from other modules if settings change.
 module.exports = { startLogReader, loadLogReaderConfig };

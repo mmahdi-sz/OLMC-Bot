@@ -4,9 +4,6 @@ const logger = require('../logger');
 const db = require('../database');
 const luckpermsDb = require('../luckpermsDb');
 
-/**
- * Handles messages sent from Telegram to the in-game chat.
- */
 async function handleChatMessage(bot, msg, db, appConfig, rconClient) {
     const { from: { id: userId }, chat: { id: chatId }, message_id: messageId, text } = msg;
 
@@ -67,8 +64,11 @@ async function handleChatMessage(bot, msg, db, appConfig, rconClient) {
 
     // 4. Sanitize and send the message to the game via RCON
     try {
-        const sanitizedText = text.replace(/"/g, '\\"').replace(/\\/g, '\\\\');
-        const command = `tellraw @a [{"text":"[Telegram] ","color":"aqua"},{"text":"${username}","color":"white"},{"text":": ${sanitizedText}","color":"gray"}]`;
+        const sanitizedUsername = username.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const sanitizedText = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        
+        const command = `tellraw @a [{"text":"[Telegram] ","color":"aqua"},{"text":"${sanitizedUsername}","color":"white"},{"text":": ${sanitizedText}","color":"gray"}]`;
+        
         await rconClient.send(command);
         logger.info('CHAT_BRIDGE', `Message from ${username} (TG: ${userId}) sent to game.`);
     } catch (error) {
