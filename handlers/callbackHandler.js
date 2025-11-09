@@ -1,5 +1,3 @@
-// handlers/callbackHandler.js
-
 const { Rcon } = require('rcon-client'); 
 const rankManager = require('./rankManager.js');
 const db = require('../database.js');
@@ -10,6 +8,11 @@ const verifyHandler = require('../verify.js');
 
 const MODULE_NAME = 'CALLBACK_HANDLER';
 
+function escapeMarkdownV2Internal(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+}
+
 function answerPermissionDenied(bot, callbackQueryId, userLang) {
     const alertText = getText(userLang, 'permission_denied');
     return bot.answerCallbackQuery(callbackQueryId, { text: alertText, show_alert: true });
@@ -19,10 +22,16 @@ async function showAdminPanel(bot, callbackQuery, userLang = 'fa') {
     const { message: { chat: { id: chatId }, message_id: messageId } } = callbackQuery;
     const keyboard = {
         inline_keyboard: [
-            [{ text: getText(userLang, 'btnAddAdmin'), callback_data: 'add_admin' }],
-            [{ text: getText(userLang, 'btnRemoveAdmin'), callback_data: 'remove_admin_prompt' }],
-            [{ text: getText(userLang, 'btnListAdmins'), callback_data: 'list_admins' }],
-            [{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]
+            [
+                { text: '➕ ' + getText(userLang, 'btnAddAdmin'), callback_data: 'add_admin' },
+                { text: '➖ ' + getText(userLang, 'btnRemoveAdmin'), callback_data: 'remove_admin_prompt' }
+            ],
+            [
+                { text: '📋 ' + getText(userLang, 'btnListAdmins'), callback_data: 'list_admins' }
+            ],
+            [
+                { text: '🏠 ' + getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }
+            ]
         ]
     };
     try {
@@ -48,15 +57,15 @@ async function showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, u
         const keyboardRows = [...serverButtons];
         if (isSuperAdmin) {
              keyboardRows.push(
-                [{ text: getText(userLang, 'btnAddServer'), callback_data: 'add_server' }, { text: getText(userLang, 'btnRemoveServer'), callback_data: 'remove_server_prompt' }]
+                [{ text: '➕ ' + getText(userLang, 'btnAddServer'), callback_data: 'add_server' }, { text: '🗑 ' + getText(userLang, 'btnRemoveServer'), callback_data: 'remove_server_prompt' }]
              );
         }
-        keyboardRows.push([{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]);
+        keyboardRows.push([{ text: '🏠 ' + getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]);
         
         const keyboard = { inline_keyboard: keyboardRows };
         const messageText = userServers.length > 0 ? getText(userLang, 'rconMenuTitle') : getText(userLang, 'rconMenuTitleNoServers');
 
-        await bot.editMessageText(messageText, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
+        await bot.editMessageText(messageText, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
     } catch (error) {
         if (!error.message.includes('message is not modified')) {
             logger.error(MODULE_NAME, `Error in showServerMenu for user ${userId}`, { error: error.message });
@@ -74,7 +83,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
     const userLang = await db.getUserLanguage(userId);
 
     try {
-        // --- Universal Handlers ---
         if (action.startsWith('set_lang_')) {
             const langCode = action.split('_').pop();
             await db.setUserLanguage(userId, langCode);
@@ -98,7 +106,6 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             return registrationHandler.handleRegistrationCallback(bot, callbackQuery, db);
         }
         
-        // --- Main Menu and User Actions ---
         if (action === 'start_menu') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const updatedMsg = { ...msg, from: callbackQuery.from, text: '/start' };
@@ -107,38 +114,95 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         
         if (action === 'manage_account') {
             await bot.answerCallbackQuery(callbackQuery.id);
-            const message = getText(userLang, 'accountPanelTitle');
+            const registration = await db.getRegistrationByTelegramId(userId);
+            const isVerified = registration ? !!registration.is_verified : false;
             
-            const isVerified = await db.getVerificationStatus(userId);
-            let infoButton;
-
+            let statusEmoji = isVerified ? '✅' : '⚠️';
+            let statusText = isVerified 
+                ? getText(userLang, 'statusVerified')
+                : getText(userLang, 'statusNotVerified');
+            
+            const message = `${statusEmoji} *${statusText}*\n\n` + getText(userLang, 'accountPanelTitle');
+            
+            const buttons = [
+                [{ 
+                    text: '💎 ' + getText(userLang, 'btnReferralInfo'), 
+                    callback_data: 'show_referral_info' 
+                }]
+            ];
+            
             if (isVerified) {
-                infoButton = { text: getText(userLang, 'btnPlayerStats'), callback_data: 'show_player_stats' };
+                buttons.push([{ 
+                    text: '📊 ' + getText(userLang, 'btnPlayerStats'), 
+                    callback_data: 'show_player_stats' 
+                }]);
             } else {
-                infoButton = { text: getText(userLang, 'btnVerifyAccount'), callback_data: 'start_verification' };
+                buttons.push([{ 
+                    text: '🔐 ' + getText(userLang, 'btnVerifyAccount'), 
+                    callback_data: 'start_verification' 
+                }]);
             }
+            
+            buttons.push([{ 
+                text: '◀️ ' + getText(userLang, 'btnBackToMainMenu'), 
+                callback_data: 'user_start_menu' 
+            }]);
+            
+            const keyboard = { inline_keyboard: buttons };
 
-            const keyboard = { inline_keyboard: [
-                [{ text: getText(userLang, 'btnReferralInfo'), callback_data: 'show_referral_info' }],
-                [infoButton],
-                [{ text: getText(userLang, 'btnBack'), callback_data: 'user_start_menu' }]
-            ]};
-            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+            return bot.editMessageText(message, { 
+                chat_id: chatId, 
+                message_id: messageId, 
+                reply_markup: keyboard, 
+                parse_mode: 'MarkdownV2' 
+            });
         }
         
         if (action === 'show_referral_info') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const referralLink = `https://t.me/${appConfig.mainBotUsername}?start=${userId}`;
             const message = getText(userLang, 'referralInfoMessage', referralLink);
-            const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]] };
-            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+            const keyboard = { inline_keyboard: [[{ text: '◀️ ' + getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]] };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
+        }
+        
+        if (action === 'show_player_stats') {
+            await bot.answerCallbackQuery(callbackQuery.id);
+    
+            const registration = await db.getRegistrationByTelegramId(userId);
+            if (!registration) {
+                return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'error_generic'), show_alert: true });
+            }
+            
+            let statsMessage = '📊 *آمار بازی شما*\n\n━━━━━━━━━━━━━━━━\n\n';
+            statsMessage += `👤 *نام کاربری:* \`${escapeMarkdownV2Internal(registration.game_username)}\`\n`;
+            statsMessage += `📦 *نسخه:* ${registration.game_edition === 'java' ? '☕️ Java' : '📱 Bedrock'}\n`;
+            statsMessage += `🎂 *سن:* ${registration.age}\n`;
+            statsMessage += `✅ *وضعیت:* ${registration.is_verified ? getText(userLang, 'statusVerified') : getText(userLang, 'statusNotVerified')}\n`;
+            statsMessage += `📅 *تاریخ ثبت‌نام:* ${new Date(registration.created_at).toLocaleDateString('fa-IR')}\n\n`;
+            
+            statsMessage += `━━━━━━━━━━━━━━━━\n\n`;
+            statsMessage += `💡 *نکته:* آمار تکمیلی به زودی اضافه می‌شود`;
+            
+            const keyboard = {
+                inline_keyboard: [[
+                    { text: '◀️ ' + getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }
+                ]]
+            };
+            
+            return bot.editMessageText(statsMessage, {
+                chat_id: chatId,
+                message_id: messageId,
+                reply_markup: keyboard,
+                parse_mode: 'MarkdownV2'
+            });
         }
         
         if (action === 'user_start_menu') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const message = getText(userLang, 'greeting_user_approved');
             const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
-            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
         }
 
         if (action === 'start_verification') {
@@ -148,14 +212,14 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
                 inline_keyboard: [
                     [{ text: getText(userLang, 'btnVerifyFromBot'), callback_data: 'verify_from_bot' }],
                     [{ text: getText(userLang, 'btnVerifyFromGame'), callback_data: 'verify_from_game' }],
-                    [{ text: getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]
+                    [{ text: '◀️ ' + getText(userLang, 'btnBackToAccountPanel'), callback_data: 'manage_account' }]
                 ]
             };
-            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
         }
 
-        if (action === 'verify_from_bot') {
-            await bot.answerCallbackQuery(callbackQuery.id, { text: '⏳ در حال ساخت کد...' });
+        if (action === 'verify_from_bot' || action === 'verify_refresh_code') {
+            await bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'gettingGroupList') });
             const result = await verifyHandler.handleStartVerificationFromBot(userId, userLang);
             return bot.editMessageText(result.message, { chat_id: chatId, message_id: messageId, reply_markup: result.keyboard, parse_mode: 'MarkdownV2' });
         }
@@ -163,12 +227,10 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         if (action === 'verify_from_game') {
             await bot.answerCallbackQuery(callbackQuery.id);
             const message = getText(userLang, 'verifyInstructionsGameToBot');
-            const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnBackToVerifyMenu'), callback_data: 'start_verification' }]] };
-            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'Markdown' });
+            const keyboard = { inline_keyboard: [[{ text: '◀️ ' + getText(userLang, 'btnBackToVerifyMenu'), callback_data: 'start_verification' }]] };
+            return bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
         }
 
-
-        // --- Admin-only Actions ---
         const isRegularAdmin = await db.isAdmin(userId);
         if (!isSuperAdmin && !isRegularAdmin) {
             return answerPermissionDenied(bot, callbackQuery.id, userLang);
@@ -227,19 +289,49 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         
         if (action === 'add_admin') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
-            await db.setWizardState(userId, 'add_admin', 'awaiting_admin_id', {});
-            return bot.editMessageText(getText(userLang, 'promptAddAdmin'), { chat_id: chatId, message_id: messageId });
+            await db.setWizardState(userId, 'add_admin', 'awaiting_admin_id', { lang: userLang });
+            return bot.editMessageText(getText(userLang, 'promptAddAdmin'), { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2' });
         }
+        
         if (action === 'list_admins') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
             const admins = await db.getAdmins();
-            const adminList = admins.length === 0
-                ? getText(userLang, 'noAdminsFound')
-                : `${getText(userLang, 'adminListTitle')}\n\n` + admins.map(admin => 
-                    `${getText(userLang, 'adminListEntryName')}: ${admin.name.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&')}\n` +
-                    `${getText(userLang, 'adminListEntryId')}: \`${admin.user_id}\``
-                  ).join('\n\n');
-            return bot.editMessageText(adminList, { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2', reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBack'), callback_data: 'admin_panel' }]] } });
+            
+            if (admins.length === 0) {
+                const keyboard = {
+                    inline_keyboard: [[
+                        { text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'admin_panel' }
+                    ]]
+                };
+                return bot.editMessageText(getText(userLang, 'noAdminsFound'), { 
+                    chat_id: chatId, 
+                    message_id: messageId, 
+                    reply_markup: keyboard,
+                    parse_mode: 'MarkdownV2'
+                });
+            }
+
+            let adminList = getText(userLang, 'adminListTitle') + '\n\n';
+            
+            admins.forEach((admin, index) => {
+                const number = index + 1;
+                const name = escapeMarkdownV2Internal(admin.name);
+                adminList += `${number}\\. ${getText(userLang, 'adminListEntryName')}: *${name}*\n`;
+                adminList += `   ${getText(userLang, 'adminListEntryId')}: \`${admin.user_id}\`\n\n`;
+            });
+            
+            const keyboard = {
+                inline_keyboard: [[
+                    { text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'admin_panel' }
+                ]]
+            };
+            
+            return bot.editMessageText(adminList, { 
+                chat_id: chatId, 
+                message_id: messageId, 
+                parse_mode: 'MarkdownV2', 
+                reply_markup: keyboard 
+            });
         }
 
         if (action.startsWith('remove_admin_')) {
@@ -248,8 +340,8 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
         
         if (action === 'add_server') {
             if (!isSuperAdmin) return answerPermissionDenied(bot, callbackQuery.id, userLang);
-            await db.setWizardState(userId, 'add_server', 'awaiting_ip', {});
-            return bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId });
+            await db.setWizardState(userId, 'add_server', 'awaiting_ip', { lang: userLang });
+            return bot.editMessageText(getText(userLang, 'promptAddServerIP'), { chat_id: chatId, message_id: messageId, parse_mode: 'MarkdownV2' });
         }
         
         if (action.startsWith('remove_server_')) {
@@ -260,22 +352,22 @@ async function handleCallback(bot, callbackQuery, db, appConfig, setupRankListCr
             
             if (stage === 'prompt') {
                 const servers = await db.getServers(userId);
-                if (servers.length === 0) return bot.answerCallbackQuery(callbackQuery.id, { text: 'هیچ سروری برای حذف وجود ندارد.', show_alert: true });
+                if (servers.length === 0) return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'errorNoServersToDelete'), show_alert: true });
                 
                 const serverButtons = servers.map(server => ([{ text: `🗑️ ${server.name}`, callback_data: `remove_server_confirm_${server.id}` }]));
-                serverButtons.push([{ text: getText(userLang, 'btnBack'), callback_data: 'rcon_menu' }]);
-                return bot.editMessageText('کدام سرور را می‌خواهید حذف کنید؟', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: serverButtons } });
+                serverButtons.push([{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rcon_menu' }]);
+                return bot.editMessageText(getText(userLang, 'promptDeleteServer'), { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: serverButtons } });
             }
 
             if (stage === 'confirm') {
                 const keyboard = { inline_keyboard: [[{ text: getText(userLang, 'btnCancel'), callback_data: 'remove_server_prompt' }, { text: getText(userLang, 'btnConfirmDelete'), callback_data: `remove_server_execute_${serverId}` }]] };
-                return bot.editMessageText(`آیا از حذف این سرور مطمئن هستید؟`, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
+                return bot.editMessageText(getText(userLang, 'confirmDeleteServer'), { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
             }
             
             if (stage === 'execute') {
                 await db.deleteServerById(parseInt(serverId, 10)); 
                 logger.success(MODULE_NAME, `Server ${serverId} removed by ${userId}.`);
-                await bot.answerCallbackQuery(callbackQuery.id, { text: 'سرور با موفقیت حذف شد.' });
+                await bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'deleteServerSuccess') });
                 return showServerMenu(bot, callbackQuery, db, appConfig, isSuperAdmin, userLang);
             }
         }

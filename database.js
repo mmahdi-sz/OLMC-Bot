@@ -1,5 +1,3 @@
-// database.js
-
 const mysql = require('mysql2/promise');
 const logger = require('./logger.js');
 
@@ -7,7 +5,6 @@ const MODULE_NAME = 'DATABASE';
 
 logger.info(MODULE_NAME, 'Initializing database connection pool...');
 
-// ===== CONFIGURATION & CONSTANTS =====
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -22,8 +19,6 @@ pool.on('error', (err) => {
     logger.error(MODULE_NAME, 'Pool-level error occurred', { error: err.message, stack: err.stack });
 });
 
-
-// ===== SCHEMA INITIALIZATION =====
 async function initDb() {
     let connection;
     try {
@@ -33,20 +28,14 @@ async function initDb() {
 
         logger.info(MODULE_NAME, 'Connected to MariaDB and initializing schema...');
 
-        // Servers Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS servers (id INT PRIMARY KEY AUTO_INCREMENT, user_id BIGINT NOT NULL, name VARCHAR(255) NOT NULL UNIQUE, ip VARCHAR(255) NOT NULL, port VARCHAR(255) NOT NULL, password TEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
-        // Admins Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS admins (user_id BIGINT PRIMARY KEY, name VARCHAR(255) NOT NULL, added_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
-        // User Links Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS user_links (telegram_user_id BIGINT PRIMARY KEY, ingame_username VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
-        // Settings Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS settings (\`key\` VARCHAR(255) PRIMARY KEY, value TEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
 
-        // Rank List Groups Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS rank_list_groups (id INT PRIMARY KEY AUTO_INCREMENT, group_name VARCHAR(255) NOT NULL UNIQUE, display_name VARCHAR(255) NOT NULL, group_template TEXT NOT NULL, player_template TEXT NOT NULL, sort_order INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // Registrations Table
-        await connection.execute(`CREATE TABLE IF NOT EXISTS registrations (id INT PRIMARY KEY AUTO_INCREMENT, telegram_user_id BIGINT NOT NULL UNIQUE, game_edition VARCHAR(10) NOT NULL, game_username VARCHAR(255) NOT NULL, age INT NOT NULL, uuid VARCHAR(16) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', referrer_telegram_id BIGINT DEFAULT NULL, is_verified BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+        await connection.execute(`CREATE TABLE IF NOT EXISTS registrations (id INT PRIMARY KEY AUTO_INCREMENT, telegram_user_id BIGINT NOT NULL UNIQUE, game_edition VARCHAR(10) NOT NULL, game_username VARCHAR(255) NOT NULL UNIQUE, age INT NOT NULL, uuid VARCHAR(16) NOT NULL UNIQUE, status VARCHAR(20) NOT NULL DEFAULT 'pending', referrer_telegram_id BIGINT DEFAULT NULL, is_verified BOOLEAN NOT NULL DEFAULT FALSE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
         try {
             await connection.execute(`ALTER TABLE registrations ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE`);
@@ -69,13 +58,10 @@ async function initDb() {
             }
         }
         
-        // Wizard States Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS wizard_states (user_id BIGINT PRIMARY KEY, wizard_type VARCHAR(50) NOT NULL, step VARCHAR(50) NOT NULL, data JSON, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // User Settings Table
         await connection.execute(`CREATE TABLE IF NOT EXISTS user_settings (telegram_user_id BIGINT PRIMARY KEY, language_code VARCHAR(5) DEFAULT 'fa') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
         
-        // Verification Codes Table
         await connection.execute(`
             CREATE TABLE IF NOT EXISTS verification_codes (
                 id INT PRIMARY KEY AUTO_INCREMENT,
@@ -88,6 +74,17 @@ async function initDb() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
         logger.info(MODULE_NAME, "Table 'verification_codes' is ready.");
+        
+        await connection.execute(`
+            CREATE INDEX IF NOT EXISTS idx_registrations_status 
+            ON registrations(status)
+        `);
+        await connection.execute(`
+            CREATE INDEX IF NOT EXISTS idx_wizard_states_user 
+            ON wizard_states(user_id, wizard_type)
+        `);
+        logger.info(MODULE_NAME, "Database indexes created successfully.");
+
 
         logger.success(MODULE_NAME, 'Schema initialization complete.');
     } catch (error) {
@@ -98,12 +95,6 @@ async function initDb() {
     }
 };
 
-/**
- * Executes a SQL query, logs the event, and ensures the connection is released.
- * @param {string} sql - The SQL query string.
- * @param {Array<any>} [params=[]] - An array of parameters for the prepared statement.
- * @returns {Promise<Array<any>>} The result array from the query execution.
- */
 async function executeAndLog(sql, params = []) {
     let connection;
     try {
@@ -120,9 +111,6 @@ async function executeAndLog(sql, params = []) {
     }
 }
 
-// ===== DATABASE FUNCTIONS =====
-
-// --- Server Management ---
 async function addServer(userId, name, ip, port, password) {
     const sql = "INSERT INTO servers (user_id, name, ip, port, password) VALUES (?, ?, ?, ?, ?)";
     const [result] = await executeAndLog(sql, [userId, name, ip, port, password]);
@@ -144,7 +132,6 @@ async function deleteServerById(serverId) {
     return result.affectedRows;
 }
 
-// --- Admin Management ---
 async function addAdmin(userId, name) {
     const sql = "INSERT INTO admins (user_id, name) VALUES (?, ?)";
     const [result] = await executeAndLog(sql, [userId, name]);
@@ -166,7 +153,6 @@ async function isAdmin(userId) {
     return rows.length > 0;
 }
 
-// --- User Link Management ---
 async function setUserLink(telegramUserId, ingameUsername) {
     const sql = "INSERT INTO user_links (telegram_user_id, ingame_username) VALUES (?, ?) ON DUPLICATE KEY UPDATE ingame_username = VALUES(ingame_username)";
     const [result] = await executeAndLog(sql, [telegramUserId, ingameUsername]);
@@ -178,7 +164,6 @@ async function getUserLink(telegramUserId) {
     return rows.length > 0 ? rows[0].ingame_username : null;
 }
 
-// --- User Language Management ---
 async function setUserLanguage(telegramUserId, languageCode) {
     const sql = "INSERT INTO user_settings (telegram_user_id, language_code) VALUES (?, ?) ON DUPLICATE KEY UPDATE language_code = VALUES(language_code)";
     const [result] = await executeAndLog(sql, [telegramUserId, languageCode]);
@@ -190,8 +175,6 @@ async function getUserLanguage(telegramUserId) {
     return rows.length > 0 && rows[0].language_code ? rows[0].language_code : 'fa';
 }
 
-
-// --- Settings Management ---
 async function setSetting(key, value) {
     const sql = "INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)";
     const [result] = await executeAndLog(sql, [key, String(value)]);
@@ -208,7 +191,6 @@ async function deleteSetting(key) {
     return result.affectedRows;
 }
 
-// --- Rank Group Management ---
 async function addRankGroup(groupName, displayName, groupTemplate, playerTemplate) {
     const sql = "INSERT INTO rank_list_groups (group_name, display_name, group_template, player_template) VALUES (?, ?, ?, ?)";
     const [result] = await executeAndLog(sql, [groupName, displayName, groupTemplate, playerTemplate]);
@@ -240,15 +222,97 @@ async function updatePlayerTemplate(groupName, newPlayerTemplate) {
     return result.affectedRows;
 }
 async function updateRankGroupSortOrder(groupId, direction) {
-    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        
+        const [[currentGroup]] = await connection.execute(
+            'SELECT sort_order FROM rank_list_groups WHERE id = ?',
+            [groupId]
+        );
+        
+        if (!currentGroup) return 0;
+        
+        const targetOrder = direction === 'up' 
+            ? currentGroup.sort_order - 1 
+            : currentGroup.sort_order + 1;
+        
+        const [[targetGroup]] = await connection.execute(
+            'SELECT id FROM rank_list_groups WHERE sort_order = ?',
+            [targetOrder]
+        );
+        
+        if (!targetGroup) return 0;
+        
+        await connection.beginTransaction();
+        
+        await connection.execute(
+            'UPDATE rank_list_groups SET sort_order = ? WHERE id = ?',
+            [targetOrder, groupId]
+        );
+        
+        await connection.execute(
+            'UPDATE rank_list_groups SET sort_order = ? WHERE id = ?',
+            [currentGroup.sort_order, targetGroup.id]
+        );
+        
+        await connection.commit();
+        
+        return 1;
+    } catch (error) {
+        if (connection) await connection.rollback();
+        logger.error(MODULE_NAME, 'Error updating rank group sort order', { error: error.message });
+        return 0;
+    } finally {
+        if (connection) connection.release();
+    }
 }
 
-// --- Registration Management ---
 async function addRegistration(data) {
     const { telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id } = data;
-    const sql = `INSERT INTO registrations (telegram_user_id, game_edition, game_username, age, uuid, status, referrer_telegram_id, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE game_edition = VALUES(game_edition), game_username = VALUES(game_username), age = VALUES(age), uuid = VALUES(uuid), status = 'pending', referrer_telegram_id = VALUES(referrer_telegram_id), created_at = CURRENT_TIMESTAMP;`;
-    const [result] = await executeAndLog(sql, [telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id || null]);
-    return result;
+    const sql = `
+        INSERT INTO registrations 
+        (telegram_user_id, game_edition, game_username, age, uuid, status, referrer_telegram_id, created_at) 
+        VALUES (?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP) 
+        ON DUPLICATE KEY UPDATE 
+            game_edition = VALUES(game_edition), 
+            game_username = VALUES(game_username), 
+            age = VALUES(age), 
+            uuid = VALUES(uuid), 
+            status = 'pending', 
+            referrer_telegram_id = VALUES(referrer_telegram_id), 
+            created_at = CURRENT_TIMESTAMP
+    `;
+    
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        
+        const [existing] = await connection.execute(
+            'SELECT telegram_user_id FROM registrations WHERE game_username = ? AND telegram_user_id != ? FOR UPDATE',
+            [game_username, telegram_user_id]
+        );
+        
+        if (existing.length > 0) {
+            await connection.rollback();
+            const error = new Error('Username already taken by another user');
+            error.code = 'USERNAME_TAKEN';
+            throw error;
+        }
+        
+        const [result] = await connection.execute(sql, [
+            telegram_user_id, game_edition, game_username, age, uuid, referrer_telegram_id || null
+        ]);
+        
+        await connection.commit();
+        return result;
+    } catch (error) {
+        if (connection) await connection.rollback();
+        throw error;
+    } finally {
+        if (connection) connection.release();
+    }
 }
 async function deleteRegistration(uuid) {
     const sql = "DELETE FROM registrations WHERE uuid = ?";
@@ -282,8 +346,6 @@ async function getRegistrationByUsername(gameUsername) {
     return rows.length > 0 ? rows[0] : null;
 }
 
-
-// --- Wizard State Management ---
 async function setWizardState(userId, wizardType, step, data) {
     const sql = `INSERT INTO wizard_states (user_id, wizard_type, step, data) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE wizard_type = VALUES(wizard_type), step = VALUES(step), data = VALUES(data);`;
     return executeAndLog(sql, [userId, wizardType, step, JSON.stringify(data || {})]);
@@ -304,8 +366,6 @@ async function deleteWizardState(userId) {
     const sql = "DELETE FROM wizard_states WHERE user_id = ?";
     return executeAndLog(sql, [userId]);
 }
-
-// ========== VERIFICATION FUNCTIONS ==========
 
 async function getVerificationStatus(telegramUserId) {
     const sql = "SELECT is_verified FROM registrations WHERE telegram_user_id = ? LIMIT 1";
@@ -348,8 +408,6 @@ async function deleteVerificationCode(code) {
     await executeAndLog(sql, [code]);
 }
 
-
-// ===== EXPORTS =====
 const db = {
     initDb,
     addServer, getServers, deleteServer, deleteServerById,

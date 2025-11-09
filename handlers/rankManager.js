@@ -14,12 +14,8 @@ const WIZARD_STEPS = {
 
 function escapeMarkdownV2(text) {
     if (typeof text !== 'string') return '';
-    return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
-
-// ===================================================================
-//                             MAIN FUNCTIONS
-// ===================================================================
 
 async function startRankManager(bot, msg, db, setupRankListCron) {
     const chatId = msg.chat.id;
@@ -34,7 +30,7 @@ async function startRankManager(bot, msg, db, setupRankListCron) {
         let messageText = `${getText(userLang, 'rankManagerTitle')}\n\n`;
 
         if (configuredGroups.length > 0) {
-            messageText += `${getText(userLang, 'rankManagerConfiguredGroups')}:\n`;
+            messageText += `${getText(userLang, 'rankManagerConfiguredGroups')}:\n\n`;
             configuredGroups.forEach((group, index) => {
                 const displayName = escapeMarkdownV2(group.display_name);
                 const groupName = escapeMarkdownV2(group.group_name);
@@ -46,10 +42,20 @@ async function startRankManager(bot, msg, db, setupRankListCron) {
 
         const keyboard = {
             inline_keyboard: [
-                [{ text: getText(userLang, 'btnRankMgrAddGroup'), callback_data: 'rankmgr_add_prompt' }, { text: getText(userLang, 'btnRankMgrDeleteGroup'), callback_data: 'rankmgr_delete_prompt' }],
-                [{ text: getText(userLang, 'btnRankMgrSort'), callback_data: 'rankmgr_sort_prompt' }, { text: getText(userLang, 'btnRankMgrAddTime'), callback_data: 'rankmgr_addtime_prompt' }],
-                [{ text: getText(userLang, 'btnRankMgrSettings'), callback_data: 'rankmgr_settings' }],
-                [{ text: getText(userLang, 'btnRankMgrExit'), callback_data: 'rankmgr_exit' }]
+                [
+                    { text: getText(userLang, 'btnRankMgrAddGroup'), callback_data: 'rankmgr_add_prompt' }, 
+                    { text: getText(userLang, 'btnRankMgrDeleteGroup'), callback_data: 'rankmgr_delete_prompt' }
+                ],
+                [
+                    { text: getText(userLang, 'btnRankMgrSort'), callback_data: 'rankmgr_sort_prompt' }, 
+                    { text: getText(userLang, 'btnRankMgrAddTime'), callback_data: 'rankmgr_addtime_prompt' }
+                ],
+                [
+                    { text: getText(userLang, 'btnRankMgrSettings'), callback_data: 'rankmgr_settings' }
+                ],
+                [
+                    { text: getText(userLang, 'btnRankMgrExit'), callback_data: 'rankmgr_exit' }
+                ]
             ]
         };
 
@@ -85,11 +91,12 @@ async function handleRankManagerCallback(bot, callbackQuery, db, setupRankListCr
         } else if (action.startsWith('rankmgr_sort_')) {
             await handleSortOrderMenu(bot, callbackQuery, db);
         } else if (action.startsWith('rankmgr_addtime_')) {
-            await handleAddTimeWizard(bot, callbackQuery, db);
+            await handleAddTimeWizard(bot, callbackQuery, db, setupRankListCron);
         } else if (action.startsWith('rankmgr_settings') || action.startsWith('rank_interval_')) {
             await handleSettings(bot, callbackQuery, db, setupRankListCron);
         } else if (action === 'rankmgr_exit') {
             logger.info(MODULE_NAME, `User ${userId} exited the menu.`);
+            await bot.answerCallbackQuery(callbackQuery.id);
             await bot.deleteMessage(callbackQuery.message.chat.id, callbackQuery.message.message_id).catch(() => {});
         } else if (action === 'rankmgr_back_to_main') {
             logger.info(MODULE_NAME, `User ${userId} returned to the main menu.`);
@@ -129,10 +136,6 @@ async function handleRankManagerWizard(bot, msg, db, setupRankListCron) {
     return true;
 }
 
-// ===================================================================
-//                        HANDLER IMPLEMENTATIONS
-// ===================================================================
-
 async function handleAddGroupWizard(bot, callbackQuery, db) {
     const action = callbackQuery.data;
     const msg = callbackQuery.message;
@@ -151,7 +154,8 @@ async function handleAddGroupWizard(bot, callbackQuery, db) {
             return bot.editMessageText(getText(userLang, 'errorAllGroupsAdded'), { 
                 chat_id: msg.chat.id, 
                 message_id: msg.message_id, 
-                reply_markup: { inline_keyboard: [[{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]] } 
+                reply_markup: { inline_keyboard: [[{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]] },
+                parse_mode: 'MarkdownV2'
             });
         }
 
@@ -160,11 +164,12 @@ async function handleAddGroupWizard(bot, callbackQuery, db) {
             acc[acc.length - 1].push({ text: group, callback_data: `rankmgr_add_select_${group}` });
             return acc;
         }, []);
-        keyboardRows.push([{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]);
+        keyboardRows.push([{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]);
         await bot.editMessageText(getText(userLang, 'promptAddGroup'), { 
             chat_id: msg.chat.id, 
             message_id: msg.message_id, 
-            reply_markup: { inline_keyboard: keyboardRows } 
+            reply_markup: { inline_keyboard: keyboardRows },
+            parse_mode: 'MarkdownV2' 
         });
 
     } else if (action.startsWith('rankmgr_add_select_')) {
@@ -175,7 +180,7 @@ async function handleAddGroupWizard(bot, callbackQuery, db) {
         await db.setWizardState(userId, 'rank_add_group', WIZARD_STEPS.AWAITING_DISPLAY_NAME, wizardData);
         
         await bot.deleteMessage(msg.chat.id, msg.message_id).catch(() => {});
-        await bot.sendMessage(userId, getText(userLang, 'promptGroupDisplayName', groupName), { parse_mode: 'Markdown' });
+        await bot.sendMessage(userId, getText(userLang, 'promptGroupDisplayName', groupName), { parse_mode: 'MarkdownV2' });
     }
 }
 
@@ -189,14 +194,14 @@ async function handleAddGroupWizardSteps(bot, msg, db, state, setupRankListCron)
             state.data.displayName = text;
             logger.debug(MODULE_NAME, 'Add Group Wizard: Received display name', { userId, displayName: text });
             await db.setWizardState(userId, 'rank_add_group', WIZARD_STEPS.AWAITING_GROUP_TEMPLATE, state.data);
-            await bot.sendMessage(userId, getText(userLang, 'promptGroupTemplate'), { parse_mode: 'Markdown' });
+            await bot.sendMessage(userId, getText(userLang, 'promptGroupTemplate'), { parse_mode: 'MarkdownV2' });
             break;
 
         case WIZARD_STEPS.AWAITING_GROUP_TEMPLATE:
             state.data.groupTemplate = text;
             logger.debug(MODULE_NAME, 'Add Group Wizard: Received group template', { userId });
             await db.setWizardState(userId, 'rank_add_group', WIZARD_STEPS.AWAITING_PLAYER_TEMPLATE, state.data);
-            await bot.sendMessage(userId, getText(userLang, 'promptPlayerTemplate'), { parse_mode: 'Markdown' });
+            await bot.sendMessage(userId, getText(userLang, 'promptPlayerTemplate'), { parse_mode: 'MarkdownV2' });
             break;
 
         case WIZARD_STEPS.AWAITING_PLAYER_TEMPLATE:
@@ -205,10 +210,10 @@ async function handleAddGroupWizardSteps(bot, msg, db, state, setupRankListCron)
             try {
                 await db.addRankGroup(groupName, displayName, groupTemplate, text);
                 logger.success(MODULE_NAME, `Group '${groupName}' added successfully by user ${userId}.`);
-                await bot.sendMessage(userId, getText(userLang, 'addGroupSuccess', displayName), { parse_mode: 'Markdown' });
+                await bot.sendMessage(userId, getText(userLang, 'addGroupSuccess', displayName), { parse_mode: 'MarkdownV2' });
             } catch (error) {
                 logger.error(MODULE_NAME, "Error adding rank group to DB", { error: error.message, stack: error.stack });
-                await bot.sendMessage(userId, getText(userLang, 'errorAddGroupFailed'));
+                await bot.sendMessage(userId, getText(userLang, 'errorAddGroupFailed'), { parse_mode: 'MarkdownV2' });
             } finally {
                 await db.deleteWizardState(userId);
                 const mockMsg = { chat: { id: userId }, message_thread_id: topicId, from: { id: userId } };
@@ -231,11 +236,12 @@ async function handleDeleteGroup(bot, callbackQuery, db, setupRankListCron) {
             return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'errorNoGroupsToDelete'), show_alert: true });
         }
         const groupButtons = configuredGroups.map(group => ([{ text: `🗑️ ${group.display_name} (${group.group_name})`, callback_data: `rankmgr_delete_confirm_${group.group_name}` }]));
-        groupButtons.push([{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]);
+        groupButtons.push([{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]);
         await bot.editMessageText(getText(userLang, 'promptDeleteGroup'), { 
             chat_id: msg.chat.id, 
             message_id: msg.message_id, 
-            reply_markup: { inline_keyboard: groupButtons } 
+            reply_markup: { inline_keyboard: groupButtons },
+            parse_mode: 'MarkdownV2'
         });
     
     } else if (action.startsWith('rankmgr_delete_confirm_')) {
@@ -271,22 +277,23 @@ async function handleSortOrderMenu(bot, callbackQuery, db) {
     const keyboardRows = [];
     groups.forEach((group, index) => {
         const row = [];
-        row.push({ text: `${index + 1}. ${group.display_name}`, callback_data: 'noop' });
-        // بهبود: دکمه‌ها فقط در صورت امکان جابجایی نمایش داده می‌شوند
+        const displayName = escapeMarkdownV2(group.display_name);
+        row.push({ text: `${index + 1}. ${displayName}`, callback_data: 'noop' });
         if (index > 0) row.push({ text: '🔼', callback_data: `rankmgr_sort_move_up_${group.id}` });
         if (index < groups.length - 1) row.push({ text: '🔽', callback_data: `rankmgr_sort_move_down_${group.id}` });
         keyboardRows.push(row);
     });
-    keyboardRows.push([{ text: getText(userLang, 'btnSaveChangesAndBack'), callback_data: 'rankmgr_back_to_main' }]);
+    keyboardRows.push([{ text: '💾 ' + getText(userLang, 'btnSaveChangesAndBack'), callback_data: 'rankmgr_back_to_main' }]);
 
     await bot.editMessageText(getText(userLang, 'promptSortGroups'), { 
         chat_id: msg.chat.id, 
         message_id: msg.message_id, 
-        reply_markup: { inline_keyboard: keyboardRows } 
+        reply_markup: { inline_keyboard: keyboardRows },
+        parse_mode: 'MarkdownV2'
     });
 }
 
-async function handleAddTimeWizard(bot, callbackQuery, db) {
+async function handleAddTimeWizard(bot, callbackQuery, db, setupRankListCron) {
     const action = callbackQuery.data;
     const msg = callbackQuery.message;
     const userId = callbackQuery.from.id;
@@ -296,14 +303,18 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
 
     if (action === 'rankmgr_addtime_prompt') {
         logger.debug(MODULE_NAME, 'Add Time Wizard: Starting', { userId });
+        await db.deleteWizardState(userId); // Clear state for fresh start
+        
         const allGroups = await luckpermsDb.getAllGroups();
         const wizardData = { allGroups, selectedGroups: [], timeToAdd: { d: 0, h: 0, m: 0 }, lang: userLang };
         await db.setWizardState(userId, 'rank_add_time', WIZARD_STEPS.AWAITING_GROUP_SELECTION, wizardData);
+        
         const keyboard = buildGroupSelectionKeyboard(allGroups, [], userLang);
         await bot.editMessageText(getText(userLang, 'promptAddTimeSelectGroups'), { 
             chat_id: msg.chat.id, 
             message_id: msg.message_id, 
-            reply_markup: keyboard 
+            reply_markup: keyboard,
+            parse_mode: 'MarkdownV2' 
         });
         return;
     }
@@ -319,7 +330,11 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
         logger.debug(MODULE_NAME, 'Add Time Wizard: Toggled group', { userId, groupName, selected: state.data.selectedGroups });
         await db.setWizardState(userId, 'rank_add_time', state.step, state.data);
         const keyboard = buildGroupSelectionKeyboard(state.data.allGroups, state.data.selectedGroups, userLang);
-        await bot.editMessageReplyMarkup(keyboard, { chat_id: msg.chat.id, message_id: msg.message_id });
+        await bot.editMessageReplyMarkup(keyboard, { chat_id: msg.chat.id, message_id: msg.message_id }).catch(err => {
+             if (!err.message.includes('message is not modified')) {
+                logger.error(MODULE_NAME, 'Failed to update keyboard', { error: err.message });
+            }
+        });
 
     } else if (action === 'rankmgr_addtime_confirm_groups') {
         if (state.data.selectedGroups.length === 0) return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'errorSelectAtLeastOneGroup'), show_alert: true });
@@ -331,7 +346,7 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
             chat_id: msg.chat.id, 
             message_id: msg.message_id, 
             reply_markup: keyboard, 
-            parse_mode: 'Markdown' 
+            parse_mode: 'MarkdownV2' 
         });
 
     } else if (action.startsWith('rankmgr_addtime_adjust_')) {
@@ -343,7 +358,11 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
         logger.debug(MODULE_NAME, 'Add Time Wizard: Adjusted time', { userId, adjustment: { unit, amount }, newTime: state.data.timeToAdd });
         await db.setWizardState(userId, 'rank_add_time', state.step, state.data);
         const keyboard = buildTimeAdjustmentKeyboard(state.data.timeToAdd, userLang);
-        await bot.editMessageReplyMarkup(keyboard, { chat_id: msg.chat.id, message_id: msg.message_id });
+        await bot.editMessageReplyMarkup(keyboard, { chat_id: msg.chat.id, message_id: msg.message_id }).catch(err => {
+            if (!err.message.includes('message is not modified')) {
+                logger.error(MODULE_NAME, 'Failed to update time display', { error: err.message });
+            }
+        });
 
     } else if (action === 'rankmgr_addtime_execute') {
         const { d, h, m } = state.data.timeToAdd;
@@ -352,9 +371,26 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
         if (totalSeconds <= 0) return bot.answerCallbackQuery(callbackQuery.id, { text: getText(userLang, 'errorSelectTimeAmount'), show_alert: true });
 
         logger.info(MODULE_NAME, `Add Time Wizard: Executing time addition`, { userId, groups: state.data.selectedGroups, totalSeconds });
-        await bot.editMessageText(getText(userLang, 'addingTimeInProgress'), { chat_id: msg.chat.id, message_id: msg.message_id });
+        
+        const progressMsg = await bot.editMessageText(
+            getText(userLang, 'addingTimeInProgress'), 
+            { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'MarkdownV2' }
+        ).catch(() => null);
+        
         let successCount = 0, errorCount = 0;
-        for (const groupName of state.data.selectedGroups) {
+        const totalGroups = state.data.selectedGroups.length;
+        
+        for (let i = 0; i < state.data.selectedGroups.length; i++) {
+            const groupName = state.data.selectedGroups[i];
+            
+            if (progressMsg && i % 2 === 0) {
+                const progress = Math.floor(((i + 1) / totalGroups) * 100);
+                await bot.editMessageText(
+                    `⏳ *در حال افزایش زمان\\.\\.\\.*\n\n━━━━━━━━━━━━━━━━\n\n📊 پیشرفت: ${progress}% \\(${i + 1}/${totalGroups}\\)\n🔄 در حال پردازش گروه: \`${groupName}\``,
+                    { chat_id: msg.chat.id, message_id: msg.message_id, parse_mode: 'MarkdownV2' }
+                ).catch(() => {});
+            }
+            
             try {
                 await luckpermsDb.addTimeToTemporaryMembers(groupName, totalSeconds);
                 successCount++;
@@ -366,8 +402,16 @@ async function handleAddTimeWizard(bot, callbackQuery, db) {
         
         logger.success(MODULE_NAME, `Add Time Wizard: Execution finished`, { userId, successCount, errorCount });
         await db.deleteWizardState(userId);
-        await bot.sendMessage(msg.chat.id, getText(userLang, 'addTimeSuccess', successCount, errorCount), { message_thread_id: msg.message_thread_id });
-        await startRankManager(bot, msg, db, setupRankListCron);
+        
+        const resultMessage = getText(userLang, 'addTimeSuccess', successCount, errorCount);
+        
+        await bot.sendMessage(msg.chat.id, resultMessage, { 
+            message_thread_id: msg.message_thread_id,
+            parse_mode: 'MarkdownV2'
+        }).catch(err => logger.error(MODULE_NAME, 'Failed to send result', { error: err.message }));
+        
+        const mockMsg = { chat: { id: msg.chat.id }, message_thread_id: msg.message_thread_id, from: { id: userId }, message_id: msg.message_id };
+        await startRankManager(bot, mockMsg, db, setupRankListCron);
     }
 }
 
@@ -384,13 +428,14 @@ async function handleSettings(bot, callbackQuery, db, setupRankListCron) {
             [{ text: getText(userLang, 'settingCurrentInterval', currentInterval), callback_data: 'noop' }],
             [{ text: '-10', callback_data: 'rank_interval_sub_10' }, { text: '-1', callback_data: 'rank_interval_sub_1' }, { text: '+1', callback_data: 'rank_interval_add_1' }, { text: '+10', callback_data: 'rank_interval_add_10' }],
             [{ text: '-60 (1h)', callback_data: 'rank_interval_sub_60' }, { text: '+60 (1h)', callback_data: 'rank_interval_add_60' }],
-            [{ text: getText(userLang, 'btnSaveChangesAndBack'), callback_data: 'rank_interval_save' }],
-            [{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]
+            [{ text: '💾 ' + getText(userLang, 'btnSaveChangesAndBack'), callback_data: 'rank_interval_save' }],
+            [{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' }]
         ]};
         await bot.editMessageText(getText(userLang, 'promptSetInterval'), { 
             chat_id: msg.chat.id, 
             message_id: msg.message_id, 
-            reply_markup: keyboard 
+            reply_markup: keyboard,
+            parse_mode: 'MarkdownV2'
         });
         return;
     }
@@ -425,10 +470,6 @@ async function handleSettings(bot, callbackQuery, db, setupRankListCron) {
     }
 }
 
-// ===================================================================
-//                             HELPER FUNCTIONS
-// ===================================================================
-
 function buildGroupSelectionKeyboard(allGroups, selectedGroups, userLang) {
     const keyboardRows = allGroups.reduce((acc, group, index) => {
         const isSelected = selectedGroups.includes(group);
@@ -438,7 +479,7 @@ function buildGroupSelectionKeyboard(allGroups, selectedGroups, userLang) {
         return acc;
     }, []);
     keyboardRows.push([
-        { text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' },
+        { text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_back_to_main' },
         { text: getText(userLang, 'btnNext'), callback_data: 'rankmgr_addtime_confirm_groups' }
     ]);
     return { inline_keyboard: keyboardRows };
@@ -451,7 +492,7 @@ function buildTimeAdjustmentKeyboard(time, userLang) {
         [{ text: getText(userLang, 'btnSub5Min'), callback_data: 'rankmgr_addtime_adjust_m_-5' }, { text: getText(userLang, 'btnAdd5Min'), callback_data: 'rankmgr_addtime_adjust_m_5' }],
         [{ text: getText(userLang, 'btnSub1Hour'), callback_data: 'rankmgr_addtime_adjust_h_-1' }, { text: getText(userLang, 'btnAdd1Hour'), callback_data: 'rankmgr_addtime_adjust_h_1' }],
         [{ text: getText(userLang, 'btnSub1Day'), callback_data: 'rankmgr_addtime_adjust_d_-1' }, { text: getText(userLang, 'btnAdd1Day'), callback_data: 'rankmgr_addtime_adjust_d_1' }],
-        [{ text: getText(userLang, 'btnBack'), callback_data: 'rankmgr_addtime_prompt' }, { text: getText(userLang, 'btnConfirm'), callback_data: 'rankmgr_addtime_execute' }]
+        [{ text: '◀️ ' + getText(userLang, 'btnBack'), callback_data: 'rankmgr_addtime_prompt' }, { text: getText(userLang, 'btnConfirm'), callback_data: 'rankmgr_addtime_execute' }]
     ]};
 }
 

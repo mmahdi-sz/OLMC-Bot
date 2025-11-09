@@ -2,8 +2,12 @@ const logger = require('../logger');
 const { getText } = require('../i18n');
 const registrationHandler = require('../handlers/registrationHandler');
 
+function escapeMarkdownV2(text) {
+    if (typeof text !== 'string') return '';
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+}
+
 async function sendLanguageSelectionMenu(bot, chatId, messageId = null) {
-    // از آنجایی که این متن ثابت است، زبان 'fa' را به عنوان پیش‌فرض انتخاب می‌کنیم
     const message = getText('fa', 'choose_language_prompt');
     const keyboard = {
         inline_keyboard: [
@@ -14,23 +18,18 @@ async function sendLanguageSelectionMenu(bot, chatId, messageId = null) {
     
     if (messageId) {
         try {
-            await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard });
+            await bot.editMessageText(message, { chat_id: chatId, message_id: messageId, reply_markup: keyboard, parse_mode: 'MarkdownV2' });
         } catch (e) { /* پیام تغییری نکرده یا مشکلی وجود دارد، مهم نیست */ }
     } else {
-        await bot.sendMessage(chatId, message, { reply_markup: keyboard });
+        await bot.sendMessage(chatId, message, { reply_markup: keyboard, parse_mode: 'MarkdownV2' });
     }
 }
 
-// --- /start command ---
 const startCommand = {
     name: '/start',
     regex: /\/start(?: (.+))?$/,
     execute: async (bot, msg, match, appConfig, db) => {
-        // <<<< CHANGE START >>>>
-        // متغیر supportBotUsername برای استفاده‌های آتی از appConfig استخراج می‌شود.
-        // متغیر supportBotUsername نیز برای منطق جدید اضافه شد
-        const { superAdminId, supportAdminUsername, supportBotUsername } = appConfig;
-        // <<<< CHANGE END >>>>
+        const { superAdminId, supportBotUsername } = appConfig;
         const chatId = msg.chat.id;
         const userId = msg.from.id;
         const referrerId = match[1];
@@ -47,9 +46,6 @@ const startCommand = {
         
         const userLang = await db.getUserLanguage(userId);
         
-        // اگر کاربر زبان انتخاب نکرده باشد، ابتدا منوی انتخاب زبان نمایش داده می‌شود.
-        //getUserLanguage یک مقدار پیش‌فرض 'fa' برمی‌گرداند، بنابراین این شرط تقریباً هیچ‌وقت برقرار نمی‌شود
-        // مگر اینکه منطق getUserLanguage تغییر کند. برای اطمینان باقی می‌ماند.
         if (!userLang) {
             return sendLanguageSelectionMenu(bot, chatId, isCallback ? msg.message_id : null);
         }
@@ -60,7 +56,6 @@ const startCommand = {
         let responseText = '';
         let responseKeyboard = {};
 
-        // منوی ادمین
         if (isSuperAdmin || isRegularAdmin) {
             responseText = getText(userLang, 'greeting_admin');
             const baseKeyboard = [
@@ -70,30 +65,21 @@ const startCommand = {
                 baseKeyboard.push([{ text: getText(userLang, 'btn_admin_panel'), callback_data: 'admin_panel' }]);
                 baseKeyboard.push([{ text: getText(userLang, 'btn_rank_list_management'), callback_data: 'manage_rank_list' }]);
             }
+            baseKeyboard.push([{ text: getText(userLang, 'btnBackToMainMenu'), callback_data: 'start_menu' }]);
             responseKeyboard = { inline_keyboard: baseKeyboard };
         } else {
-            // منوی کاربر عادی
             try {
                 const registration = await db.getRegistrationByTelegramId(userId);
                 if (registration) {
-                    // <<<< CHANGE START >>>>
-                    // منطق برای وضعیت 'pending' ساده‌سازی شد، زیرا کاربر اکنون دکمه مستقیم دارد.
                     if (registration.status === 'pending') {
-                        // این پیام برای موارد نادری است که کاربر دکمه را نادیده گرفته و دوباره /start را می‌زند.
-                        // --- بخش بهبود یافته ---
-                        // به جای ارسال یک پیام متنی، پیام نهایی‌سازی را دوباره برای کاربر ارسال می‌کنیم.
-                        // این کار تضمین می‌کند که کاربر هرگز در این مرحله گیر نمی‌کند.
                         logger.info('CMD_START', `Resending finalization message for pending user ${userId}.`);
                         await registrationHandler.resendFinalizationMessage(bot, userId, db, supportBotUsername);
-                        return; // اجرای دستور را در اینجا متوقف می‌کنیم چون پیام لازم ارسال شده است.
-                        // --- پایان بخش بهبود یافته ---
+                        return;
                     } else if (registration.status === 'approved') {
                         responseText = getText(userLang, 'greeting_user_approved');
                         responseKeyboard = { inline_keyboard: [[{ text: getText(userLang, 'btn_manage_account'), callback_data: 'manage_account' }]] };
                     }
-                    // <<<< CHANGE END >>>>
                 } else {
-                    // اگر ثبت‌نامی وجود ندارد، فرآیند را شروع کن
                     return registrationHandler.startRegistration(bot, msg, referrerId, db);
                 }
             } catch (error) {
@@ -102,7 +88,6 @@ const startCommand = {
             }
         }
 
-        // منطق ارسال یا ویرایش پیام
         if (isCallback) {
             try {
                 await bot.editMessageText(responseText, {
@@ -125,7 +110,6 @@ const startCommand = {
     }
 };
 
-// --- /language command ---
 const languageCommand = {
     name: '/language',
     regex: /\/language/,
@@ -137,4 +121,63 @@ const languageCommand = {
     }
 };
 
-module.exports = [startCommand, languageCommand];
+const helpCommand = {
+    name: '/help',
+    regex: /\/help/,
+    execute: async (bot, msg, match, appConfig, db) => {
+        const userId = msg.from.id;
+        const chatId = msg.chat.id;
+        const userLang = await db.getUserLanguage(userId);
+        
+        const isSuperAdmin = (userId === appConfig.superAdminId);
+        const isRegularAdmin = await db.isAdmin(userId);
+        
+        let helpText = '⚙️ *راهنمای دستورات*\n\n━━━━━━━━━━━━━━━━\n\n';
+        
+        if (isSuperAdmin || isRegularAdmin) {
+            helpText += `${getText(userLang, 'helpAdminTitle')}\n\n`;
+            helpText += `${getText(userLang, 'helpAdminGeneral')}\n`;
+            helpText += `• \`/start\` \\- منوی اصلی\n`;
+            helpText += `• \`/help\` \\- نمایش راهنما\n`;
+            helpText += `• \`/language\` \\- تغییر زبان\n\n`;
+            
+            if (isSuperAdmin) {
+                helpText += `${getText(userLang, 'helpSuperAdminCommands')}\n`;
+                helpText += `• \`/enable <module>\` \\- فعال‌سازی ماژول\n`;
+                helpText += `• \`/disable <module>\` \\- غیرفعال‌سازی ماژول\n`;
+                helpText += `• \`/set <user_id> <username>\` \\- تنظیم لینک کاربر\n`;
+                helpText += `• \`/del <uuid>\` \\- حذف درخواست ثبت‌نام\n`;
+                helpText += `• \`/setconfig <key> <value>\` \\- تنظیمات\n\n`;
+            }
+            
+            helpText += `${getText(userLang, 'helpRankCommands')}\n`;
+            helpText += `• \`/sendranklist\` \\- ارسال دستی لیست (در تاپیک رنک)\n`;
+            helpText += `• \`/ranks\` \\- لیست گروه‌ها (در تاپیک رنک)\n`;
+            helpText += `• \`/rankexpiry <group>\` \\- زمان انقضا (در تاپیک رنک)\n\n`;
+            
+            helpText += `━━━━━━━━━━━━━━━━\n\n`;
+            helpText += getText(userLang, 'helpNotes');
+            
+        } else {
+            helpText = `${getText(userLang, 'helpUserTitle')}\n\n━━━━━━━━━━━━━━━━\n\n`;
+            helpText += `${getText(userLang, 'helpUserGeneral')}\n\n`;
+            helpText += `${getText(userLang, 'helpUserFeatures')}\n\n`;
+            
+            helpText += `━━━━━━━━━━━━━━━━\n\n`;
+            helpText += getText(userLang, 'helpUserSupport');
+        }
+        
+        const keyboard = {
+            inline_keyboard: [[
+                { text: '🏠 منوی اصلی', callback_data: 'start_menu' }
+            ]]
+        };
+        
+        await bot.sendMessage(chatId, helpText, {
+            parse_mode: 'MarkdownV2',
+            reply_markup: keyboard
+        });
+    }
+};
+
+module.exports = [startCommand, languageCommand, helpCommand];

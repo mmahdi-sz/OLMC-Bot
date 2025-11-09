@@ -1,5 +1,3 @@
-// core/chatBridge.js
-
 const logger = require('../logger');
 const db = require('../database');
 const luckpermsDb = require('../luckpermsDb');
@@ -16,7 +14,6 @@ async function handleChatMessage(bot, msg, db, appConfig, rconClient) {
     const isRegularAdmin = await db.isAdmin(userId);
     let username = null;
 
-    // 1. Find the user's in-game name
     if (isSuperAdmin || isRegularAdmin) {
         username = await db.getUserLink(userId);
     }
@@ -27,20 +24,28 @@ async function handleChatMessage(bot, msg, db, appConfig, rconClient) {
         }
     }
 
-    // 2. If user is not registered, send a warning and delete it
     if (!username) {
-        const replyMsg = await bot.sendMessage(chatId, `شما نمی‌توانید در چت صحبت کنید. لطفاً به بات @${mainBotUsername} رفته و مراحل ثبت نام خود را تکمیل کنید.`, {
-            reply_to_message_id: messageId,
-            message_thread_id: msg.message_thread_id
-        });
+        const warningEmoji = '⚠️';
+        const mainBotLink = `@${mainBotUsername}`;
+        
+        const replyMsg = await bot.sendMessage(
+            chatId, 
+            `${warningEmoji} *شما مجاز به ارسال پیام نیستید*\n\n━━━━━━━━━━━━━━━━\n\nℹ️ ابتدا باید ثبت\\-نام کنید\\n\n👉 به ربات ${mainBotLink} مراجعه کنید`,
+            {
+                reply_to_message_id: messageId,
+                message_thread_id: msg.message_thread_id,
+                parse_mode: 'MarkdownV2'
+            }
+        );
+        
         setTimeout(() => {
             bot.deleteMessage(chatId, messageId).catch(() => {});
             bot.deleteMessage(chatId, replyMsg.message_id).catch(() => {});
-        }, 20000);
+        }, 15000);
+        
         return;
     }
     
-    // 3. Check for cooldown
     const hasUnlimitedChat = await luckpermsDb.isUserInGroups(username, unlimitedChatRanks);
     if (!isSuperAdmin && !isRegularAdmin && !hasUnlimitedChat) {
         const lastMessageTime = await db.getSetting(`chat_cooldown_${userId}`) || 0;
@@ -49,20 +54,37 @@ async function handleChatMessage(bot, msg, db, appConfig, rconClient) {
 
         if (timeSinceLastMessage < cooldownSeconds) {
             const remaining = Math.ceil(cooldownSeconds - timeSinceLastMessage);
-            const warningMsg = await bot.sendMessage(chatId, `شما بعد از ${remaining} ثانیه می‌توانید پیام دیگری ارسال کنید.`, {
-                reply_to_message_id: messageId,
-                message_thread_id: msg.message_thread_id
-            });
+            
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            
+            let timeText = '';
+            if (minutes > 0) {
+                timeText = `${minutes} دقیقه و ${seconds} ثانیه`;
+            } else {
+                timeText = `${seconds} ثانیه`;
+            }
+
+            const warningMsg = await bot.sendMessage(
+                chatId, 
+                `⏰ *کولداون چت*\n\n━━━━━━━━━━━━━━━━\n\n⚠️ شما می‌توانید بعد از *${timeText}* پیام بعدی را ارسال کنید\\n\n💡 *نکته:* برای چت نامحدود، رنک VIP تهیه کنید`,
+                {
+                    reply_to_message_id: messageId,
+                    message_thread_id: msg.message_thread_id,
+                    parse_mode: 'MarkdownV2'
+                }
+            );
+            
             setTimeout(() => {
                 bot.deleteMessage(chatId, messageId).catch(() => {});
                 bot.deleteMessage(chatId, warningMsg.message_id).catch(() => {});
-            }, 20000);
+            }, remaining * 1000);
+            
             return;
         }
         await db.setSetting(`chat_cooldown_${userId}`, now);
     }
 
-    // 4. Sanitize and send the message to the game via RCON
     try {
         const sanitizedUsername = username.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const sanitizedText = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');

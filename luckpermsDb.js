@@ -1,7 +1,5 @@
-// luckpermsDb.js
-
 const mysql = require('mysql2/promise');
-const logger = require('./logger.js'); // <-- اضافه کردن لاگر
+const logger = require('./logger.js');
 
 const MODULE_NAME = 'LUCKPERMS_DB';
 
@@ -17,7 +15,6 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
-// این متغیر برای جلوگیری از نمایش چندباره لاگ اتصال استفاده می‌شود
 let firstConnectionEstablished = false;
 pool.on('connection', () => {
     if (!firstConnectionEstablished) {
@@ -26,7 +23,6 @@ pool.on('connection', () => {
     }
 });
 
-// تست اتصال اولیه در لحظه شروع
 (async () => {
     try {
         const connection = await pool.getConnection();
@@ -37,9 +33,6 @@ pool.on('connection', () => {
     }
 })();
 
-/**
- * تمام گروه‌های تعریف شده در LuckPerms را برمی‌گرداند.
- */
 async function getAllGroups() {
     let connection;
     try {
@@ -54,9 +47,6 @@ async function getAllGroups() {
     }
 }
 
-/**
- * اطلاعات بازیکنان دارای رنک زمان‌دار در یک گروه خاص را برمی‌گرداند.
- */
 async function getGroupExpiry(groupName) {
     let connection;
     try {
@@ -82,10 +72,6 @@ async function getGroupExpiry(groupName) {
     }
 }
 
-
-/**
- * [جدید] تابع کمکی برای یافتن تمام گروه‌هایی که از یک گروه مشخص ارث‌بری می‌کنند.
- */
 async function getChildGroups(groupName, connection) {
     try {
         const permissionToFind = `group.${groupName.toLowerCase()}`;
@@ -100,10 +86,6 @@ async function getChildGroups(groupName, connection) {
     }
 }
 
-
-/**
- * [قدیمی - برای سازگاری] تمام اعضای یک گروه (مستقیم و ارث‌بری شده) را به همراه زمان انقضای رنکشان برمی‌گرداند.
- */
 async function getGroupMembersWithExpiry(groupName) {
     let connection;
     try {
@@ -138,14 +120,6 @@ async function getGroupMembersWithExpiry(groupName) {
     }
 }
 
-
-// <<<<<<<<<<<<<<<<< CHANGE START >>>>>>>>>>>>>>>>>
-/**
- * [جدید و بهینه] اطلاعات تمام بازیکنان را از لیست گروه‌های مشخص شده (به همراه فرزندانشان) استخراج می‌کند.
- * برای هر بازیکن، گروهی که عضو آن است و زمان انقضای مربوطه را برمی‌گرداند.
- * این تابع برای جلوگیری از نمایش تکراری بازیکنان طراحی شده است.
- * @param {string[]} configuredGroups - آرایه‌ای از نام گروه‌های اصلی که در ربات تنظیم شده‌اند.
- */
 async function getAllConfiguredGroupMembers(configuredGroups) {
     if (!configuredGroups || configuredGroups.length === 0) {
         return [];
@@ -154,7 +128,6 @@ async function getAllConfiguredGroupMembers(configuredGroups) {
     try {
         connection = await pool.getConnection();
 
-        // 1. تمام پرمیشن‌های ممکن را پیدا می‌کنیم (گروه‌های اصلی + فرزندانشان)
         let allPermissionsToCheck = [];
         for (const groupName of configuredGroups) {
             const lowerGroupName = groupName.toLowerCase();
@@ -162,14 +135,12 @@ async function getAllConfiguredGroupMembers(configuredGroups) {
             const allRelatedGroups = [lowerGroupName, ...childGroups];
             allPermissionsToCheck.push(...allRelatedGroups.map(name => `group.${name}`));
         }
-        // حذف موارد تکراری
         allPermissionsToCheck = [...new Set(allPermissionsToCheck)];
 
         if (allPermissionsToCheck.length === 0) {
             return [];
         }
 
-        // 2. کوئری اصلی برای گرفتن تمام اعضا
         const placeholders = allPermissionsToCheck.map(() => '?').join(',');
         const sql = `
             SELECT
@@ -186,7 +157,6 @@ async function getAllConfiguredGroupMembers(configuredGroups) {
 
         const [rows] = await connection.execute(sql, allPermissionsToCheck);
 
-        // 3. تبدیل نام پرمیشن به نام گروه
         return rows.map(row => ({
             username: row.username,
             group: row.permission.replace('group.', ''),
@@ -199,12 +169,7 @@ async function getAllConfiguredGroupMembers(configuredGroups) {
         if (connection) connection.release();
     }
 }
-// <<<<<<<<<<<<<<<<< CHANGE END >>>>>>>>>>>>>>>>>
 
-
-/**
- * به تمام اعضای یک گروه که رنک موقت دارند، مقدار مشخصی زمان اضافه می‌کند.
- */
 async function addTimeToTemporaryMembers(groupName, secondsToAdd) {
     let connection;
     try {
@@ -228,9 +193,6 @@ async function addTimeToTemporaryMembers(groupName, secondsToAdd) {
     }
 }
 
-/**
- * بررسی می‌کند که آیا یک بازیکن عضو حداقل یکی از گروه‌های مشخص شده است یا خیر.
- */
 async function isUserInGroups(username, groupNames) {
     if (!username || !Array.isArray(groupNames) || groupNames.length === 0) {
         return false;
@@ -280,7 +242,5 @@ module.exports = {
     getGroupMembersWithExpiry,
     addTimeToTemporaryMembers,
     isUserInGroups,
-    // <<<<<<<<<<<<<<<<< CHANGE START >>>>>>>>>>>>>>>>>
-    getAllConfiguredGroupMembers // Export کردن تابع جدید
-    // <<<<<<<<<<<<<<<<< CHANGE END >>>>>>>>>>>>>>>>>
+    getAllConfiguredGroupMembers
 };

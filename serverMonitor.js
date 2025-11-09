@@ -1,5 +1,3 @@
-// serverMonitor.js
-
 const cron = require('node-cron');
 const moment = require('moment-timezone');
 const logger = require('./logger.js');
@@ -47,9 +45,7 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
     const now = Date.now();
     
     if (!forceSend && (now - lastUpdateAttemptTime) < MIN_UPDATE_INTERVAL) {
-        logger.debug(MODULE_NAME, 'Skipping update: too soon since last attempt.', { 
-            timeSince: (now - lastUpdateAttemptTime) / 1000 
-        });
+        logger.debug(MODULE_NAME, 'Skipping update: too soon since last attempt.');
         return;
     }
     
@@ -70,23 +66,28 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
     const isOnline = rconClient !== null;
 
     if (!isOnline) {
-        if (lastSentState.isOnline === false && !forceSend) return;
-        
         const time = tehranTime();
-        const message = `🔌 *وضعیت سرور*\n\n\\- اتصال به RCON در حال حاضر قطع است\\.\n\\- آخرین بررسی: ${time}`;
         
+        let message = '🔴 *سرور آفلاین است*\n\n━━━━━━━━━━━━━━━━\n\n';
+        message += '⚠️ اتصال به RCON قطع است\n';
+        message += '💡 در حال تلاش برای اتصال مجدد\\.\\.\\.\n';
+        message += `\n🕒 آخرین بررسی \\(تهران\\): *${time}*`;
+        
+        if (lastSentState.isOnline === false && !forceSend) {
+             const minutesSinceLastUpdate = (now - lastUpdateTime) / (1000 * 60);
+             const isUpdateTimeExpired = minutesSinceLastUpdate >= FORCE_UPDATE_INTERVAL_MINUTES;
+             if (!isUpdateTimeExpired) return;
+        }
+
         try {
-            if (playerListMessageId && !forceSend) {
-                await bot.editMessageText(message, { chat_id: mainGroupId, message_id: playerListMessageId, parse_mode: 'MarkdownV2' });
+            const options = { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' };
+            if (playerListMessageId) {
+                await bot.editMessageText(message, { chat_id: mainGroupId, message_id: playerListMessageId, ...options });
+                await db.setSetting('player_list_last_update_ts', Date.now());
             } else {
-                if (playerListMessageId) {
-                    await bot.deleteMessage(mainGroupId, playerListMessageId).catch(() => {});
-                    await db.deleteSetting(PLAYER_LIST_MESSAGE_ID_KEY);
-                }
-                const sentMessage = await bot.sendMessage(mainGroupId, message, { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' });
-                if (!forceSend) {
-                    await db.setSetting(PLAYER_LIST_MESSAGE_ID_KEY, sentMessage.message_id);
-                }
+                const sentMessage = await bot.sendMessage(mainGroupId, message, options);
+                await db.setSetting(PLAYER_LIST_MESSAGE_ID_KEY, sentMessage.message_id);
+                await db.setSetting('player_list_last_update_ts', Date.now());
             }
             lastSentState = { isOnline: false, playerList: '' };
         } catch (error) {
@@ -107,7 +108,7 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
 
         if (!parsedData) {
             logger.error(MODULE_NAME, 'تجزیه پاسخ RCON برای لیست بازیکنان ناموفق بود.');
-            if (forceSend) await bot.sendMessage(mainGroupId, '❌ پاسخ RCON قابل تجزیه نیست.', { message_thread_id: playersTopicId });
+            if (forceSend) await bot.sendMessage(mainGroupId, '❌ پاسخ RCON قابل تجزیه نیست.', { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' });
             return;
         }
 
@@ -122,20 +123,19 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
             logger.debug(MODULE_NAME, 'Skipping update: Player list unchanged and interval not expired.', { minutesSinceLastUpdate });
             return;
         }
-        if (isPlayerListUnchanged && isUpdateTimeExpired) {
-            logger.info(MODULE_NAME, 'بازه زمانی منقضی شده، آپدیت زمان اجباری است.');
-        }
 
-        let message = '👥 *بازیکنان آنلاین*\n\n';
-        message += `\\- آنلاین: *${parsedData.online} / ${parsedData.max}*\n\n`;
+        let message = '🟢 *سرور آنلاین است*\n\n━━━━━━━━━━━━━━━━\n\n';
+        message += `👥 *بازیکنان آنلاین:* *${parsedData.online}* / *${parsedData.max}*\n\n`;
+        
         if (currentPlayers.length > 0) {
-            message += currentPlayers.map(p => `\\- ${escapeMarkdownV2(p)}`).join('\n');
+            message += '📋 *لیست بازیکنان:*\n\n';
+            message += currentPlayers.map((p, i) => `${i + 1}\\. ${escapeMarkdownV2(p)}`).join('\n');
         } else {
-            message += '\\- در حال حاضر هیچ بازیکنی آنلاین نیست\\.';
+            message += '📭 هیچ بازیکنی آنلاین نیست\\.';
         }
         
         const time = tehranTime();
-        message += `\n\n🕒 آخرین آپدیت \\(تهران\\): *${time}*`;
+        message += `\n\n━━━━━━━━━━━━━━━━\n🕒 آخرین آپدیت \\(تهران\\): *${time}*`;
 
         const options = { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' };
 
@@ -170,7 +170,7 @@ async function updatePlayerList(bot, db, rconClient, forceSend = false) {
 
     } catch (error) {
         logger.error(MODULE_NAME, 'خطا در دریافت لیست بازیکنان از طریق RCON', { error: error.message });
-        if (forceSend) await bot.sendMessage(mainGroupId, '❌ خطا در واکشی لیست بازیکنان.', { message_thread_id: playersTopicId });
+        if (forceSend) await bot.sendMessage(mainGroupId, '❌ خطا در واکشی لیست بازیکنان.', { message_thread_id: playersTopicId, parse_mode: 'MarkdownV2' });
     }
 }
 
