@@ -21,8 +21,8 @@ This repository contains the core logic for the OtherLand Minecraft (OLMC) serve
 ### Installation
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/OLMC-Bot/OLMC-Minecraft-Telegram-Bot.git
-    cd OLMC-Minecraft-Telegram-Bot
+    git clone https://github.com/OLMC-Bot/OLMC-Bot.git
+    cd OLMC-Bot
     ```
 2.  Install dependencies:
     ```bash
